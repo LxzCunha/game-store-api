@@ -1,10 +1,10 @@
 import express from "express";
 import Games from "./models/Games.js";
 import Seller from "./models/Seller.js";
-import Genres from "./models/Genres.js";
 import Customer from "./models/Customer.js";
 import Orders from "./models/Orders.js";
 import OrderItems from "./models/OrderItems.js";
+import GenresRoutes from "./routes/GenresRoutes.js";
 const app = express();
 
 app.use(express.json());
@@ -179,88 +179,8 @@ app.delete("/sellers/:id", async (req, res) => {
 });
 
 //CRUD CATEGORIAS
-app.get("/genres", async (req, res) => {
-    try {
-        const genres = await Genres.findAll();
-        console.log(genres)
-        res.status(200).json(genres);
-    } catch(error) {
-        console.error("Erro ao buscar gêneros: ", error);
-        res.status(500).json({
-           message: "Erro ao buscar gêneros"
-        })
-    }
-});
 
-app.get("/genres/:id", async (req, res) => {
-    try {
-        const genre = await Genres.findById(req.params.id);
-
-        if (!genre) {
-            return res.status(404).json({
-                message: "Gênero não encontrado"
-            });
-        }
-
-        res.status(200).json(genre);
-    } catch(error) {
-        console.error("Erro ao buscar gênero: ", error);
-        res.status(500).json({
-           message: "Erro ao buscar gênero"
-        })
-    }
-});
-
-app.post("/genres", async(req, res) => {
-    try {
-        const genre = await Genres.create(req.body)
-
-        res.status(201).json(genre);
-    } catch(error) {
-        console.error("Erro ao adicionar gênero: ", error)
-
-        res.status(500).json({
-            message: "Não foi possível adicionar o gênero"
-        })
-    }
-})
-
-app.put("/genres/:id", async (req, res) => {
-    try {
-        const genre = await Genres.update(req.params.id, req.body);
-
-        if (!genre) {
-            return res.status(404).json({
-                message: "Gênero não encontrado"
-            });
-        }
-
-        res.status(200).json(genre);
-    } catch(error) {
-        console.error("Erro ao alterar gênero: ", error);
-        res.status(500).json({
-           message: "Erro ao alterar gênero"
-        })
-    }
-});
-app.delete("/genres/:id", async (req, res) => {
-    try {
-        const deleted = await Genres.remove(req.params.id);
-
-        if (!deleted) {
-            return res.status(404).json({
-                message: "Gênero não encontrado"
-            });
-        }
-
-        res.status(204).send();
-    } catch(error) {
-        console.error("Erro ao excluir gênero: ", error);
-        res.status(500).json({
-           message: "Erro ao excluir gênero"
-        })
-    }
-});
+app.use("/genres", GenresRoutes);
 
 //CRUD CLIENTES
 app.get("/customers", async (req, res) => {
