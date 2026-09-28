@@ -2,13 +2,12 @@ import express from "express";
 import Seller from "./models/Seller.js";
 import Genres from "./models/Genres.js";
 import Customer from "./models/Customer.js";
-import Orders from "./models/Orders.js";
+import OrdersRoutes from "./routes/Orders.Routes.js";       
 import OrderItems from "./models/OrderItems.js";
 import gamesRoutes from "./routes/Games.Routes.js";
 const app = express();
 
 app.use(express.json());
-
 
 //CRUD GAMES
 app.use("/games", gamesRoutes);
@@ -267,88 +266,7 @@ app.delete("/customers/:id", async (req, res) => {
 });
 
 //CRUD PEDIDO DE VENDA
-app.get("/orders", async (req, res) => {
-    try {
-        const orders = await Orders.findAll();
-        console.log(orders)
-        res.status(200).json(orders);
-    } catch(error) {
-        console.error("Erro ao buscar pedidos: ", error);
-        res.status(500).json({
-           message: "Erro ao buscar pedidos"
-        })
-    }
-});
-
-app.get("/orders/:id", async (req, res) => {
-    try {
-        const order = await Orders.findById(req.params.id);
-
-        if (!order) {
-            return res.status(404).json({
-                message: "Pedido não encontrado"
-            });
-        }
-
-        res.status(200).json(order);
-    } catch(error) {
-        console.error("Erro ao buscar pedido: ", error);
-        res.status(500).json({
-           message: "Erro ao buscar pedido"
-        })
-    }
-});
-
-app.post("/orders", async(req, res) => {
-    try {
-        const order = await Orders.create(req.body)
-
-        res.status(201).json(order);
-    } catch(error) {
-        console.error("Erro ao adicionar pedido: ", error)
-
-        res.status(500).json({
-            message: "Não foi possível adicionar o pedido"
-        })
-    }
-})
-
-app.put("/orders/:id", async (req, res) => {
-    try {
-        const order = await Orders.update(req.params.id, req.body);
-
-        if (!order) {
-            return res.status(404).json({
-                message: "Pedido não encontrado"
-            });
-        }
-
-        res.status(200).json(order);
-    } catch(error) {
-        console.error("Erro ao alterar pedido: ", error);
-        res.status(500).json({
-           message: "Erro ao alterar pedido"
-        })
-    }
-});
-app.delete("/orders/:id", async (req, res) => {
-    try {
-        const deleted = await Orders.remove(req.params.id);
-
-        if (!deleted) {
-            return res.status(404).json({
-                message: "Pedido não encontrado"
-            });
-        }
-
-        res.status(204).send();
-    } catch(error) {
-        console.error("Erro ao excluir pedido: ", error);
-        res.status(500).json({
-           message: "Erro ao excluir pedido"
-        })
-    }
-});
+app.use("/Orders", OrdersRoutes);
 
 //CRUD ITENS DO PEDIDO
 app.get("/order-items", async (req, res) => {
