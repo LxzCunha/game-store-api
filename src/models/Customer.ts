@@ -2,29 +2,29 @@ import supabase from "../config/supabase.js";
 import PersonModel, { type Person } from "./Person.js";
 
 
-type Seller = Person & {
-    hire_date: string;
+type Customer = Person & {
+    birth_date: string;
 };
 
-function toSeller(row: any) {
-    const { person, ...seller } = row;
-    return { ...person, ...seller };
+function toCustomer(row: any) {
+    const { person, ...customer } = row;
+    return { ...person, ...customer };
 }
 
 async function findAll() {
     const { data, error } = await supabase
-    .from("sellers")
-    .select("id, person_id, hire_date, person:people(*)");
+    .from("customers")
+    .select("id, person_id, birth_date, person:people(*)");
 
     if (error) throw error;
 
-    return data.map(toSeller);
+    return data.map(toCustomer);
 }
 
 async function findById(id: string) {
     const { data, error } = await supabase
-        .from("sellers")
-        .select("id, person_id, hire_date, person:people(*)")
+        .from("customers")
+        .select("id, person_id, birth_date, person:people(*)")
         .eq("id", id)
         .single();
 
@@ -35,21 +35,21 @@ async function findById(id: string) {
         return null;
     }
 
-    return toSeller(data);
+    return toCustomer(data);
 }
 
-async function create(seller: Omit<Seller, "role">) {
-    const { hire_date, ...personData } = seller;
+async function create(customer: Omit<Customer, "role">) {
+    const { birth_date, ...personData } = customer;
 
     const person = await PersonModel.create({
         ...personData,
-        role: "seller"
+        role: "customer"
     });
 
     const { data, error } = await supabase
-        .from("sellers")
-        .insert({ person_id: person.id, hire_date })
-        .select("id, person_id, hire_date")
+        .from("customers")
+        .insert({ person_id: person.id, birth_date })
+        .select("id, person_id, birth_date")
         .single();
 
     if (error) {
@@ -60,16 +60,16 @@ async function create(seller: Omit<Seller, "role">) {
     return { ...person, ...data };
 }
 
-async function update(id: string, seller: Partial<Seller>) {
+async function update(id: string, customer: Partial<Customer>) {
     const existing = await findById(id);
     if (!existing) return null;
 
-    const { hire_date, role, ...personData } = seller;
+    const { birth_date, role, ...personData } = customer;
 
-    if (hire_date !== undefined) {
+    if (birth_date !== undefined) {
         const { error } = await supabase
-            .from("sellers")
-            .update({ hire_date })
+            .from("customers")
+            .update({ birth_date })
             .eq("id", id);
 
         if (error) throw error;
@@ -87,7 +87,7 @@ async function remove(id: string) {
     if (!existing) return null;
 
     const { error } = await supabase
-        .from("sellers")
+        .from("customers")
         .delete()
         .eq("id", id);
 

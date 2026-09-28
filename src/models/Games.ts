@@ -29,12 +29,15 @@ async function findById(id: string) {
 }
 
 async function create(game:{
+    genre_id: string;
     title: string;
-    genre: string;
+    description: string;
     price: number;
     stock_quantity: number;
     release_date: string;
     developer: string;
+    image: string;
+    active: boolean;
 }) {
     const { data, error } = await supabase
         .from("games")
@@ -50,14 +53,17 @@ async function create(game:{
 }
 
 async function update(
-    id: string, 
+    id: string,
     game: {
+    genre_id: string;
     title: string;
-    genre: string;
+    description: string;
     price: number;
     stock_quantity: number;
     release_date: string;
     developer: string;
+    image: string;
+    active: boolean;
 }) {
     const { data, error } = await supabase
         .from("games")

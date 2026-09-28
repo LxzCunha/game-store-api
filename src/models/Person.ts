@@ -10,7 +10,7 @@ export type Person = {
 
 async function findAll() {
     const {data, error} = await supabase
-    .from("person")
+    .from("people")
     .select("*");
 
     if(error) {
@@ -22,7 +22,7 @@ async function findAll() {
 
 async function findById(id: string) {
     const { data, error } = await supabase
-        .from("person")
+        .from("people")
         .select("*")
         .eq("id", id)
         .single();
@@ -34,7 +34,7 @@ async function findById(id: string) {
 
 async function create(person: Person) {
     const { data, error } = await supabase
-        .from("person")
+        .from("people")
         .insert(person)
         .select()
         .single();
@@ -46,7 +46,7 @@ async function create(person: Person) {
 
 async function update(id: string, person: Partial<Person>) {
     const { data, error } = await supabase
-        .from("person")
+        .from("people")
         .update(person)
         .eq("id", id)
         .select()
@@ -59,7 +59,7 @@ async function update(id: string, person: Partial<Person>) {
 
 async function remove(id: string) {
     const { data, error } = await supabase
-        .from("person")
+        .from("people")
         .delete()
         .eq("id", id)
         .select()
@@ -72,7 +72,7 @@ async function remove(id: string) {
 
 async function searchByKeyword(keyword: string) {
     const { data, error } = await supabase
-    .from("person")
+    .from("people")
     .select("*")
     .or(`name.ilike.%${keyword}%,email.ilike.%${keyword}%`);
 
