@@ -1,9 +1,9 @@
 import express from "express";
-import Games from "./models/Games.js";
 import Seller from "./models/Seller.js";
 import Customer from "./models/Customer.js";
 import Orders from "./models/Orders.js";
 import OrderItems from "./models/OrderItems.js";
+import gamesRoutes from "./routes/Games.Routes.js";
 import GenresRoutes from "./routes/GenresRoutes.js";
 const app = express();
 
@@ -11,88 +11,8 @@ app.use(express.json());
 
 
 //CRUD GAMES
-app.get("/games", async (req, res) => {
-    try {
-        const games = await Games.findAll();
-        console.log(games)
-        res.status(200).json(games);
-    } catch(error) {
-        console.error("Erro ao buscar produtos: ", error);
-        res.status(500).json({
-           message: "Erro ao buscar produtos"
-        })
-    }
-});
+app.use("/games", gamesRoutes);
 
-app.get("/games/:id", async (req, res) => {
-    try {
-        const game = await Games.findById(req.params.id);
-
-        if (!game) {
-            return res.status(404).json({ 
-                message: "Jogo não encontrado" 
-            });
-        }
-
-        res.status(200).json(game);
-    } catch(error) {
-        console.error("Erro ao buscar jogo: ", error);
-        res.status(500).json({
-           message: "Erro ao buscar jogo"
-        })
-    }
-});
-
-app.post("/games", async(req, res) => {
-    try {
-        const game = await Games.create(req.body)
-
-        res.status(201).json(game);
-    } catch(error) {
-        console.error("Erro ao adicionar jogo: ", error)
-
-        res.status(500).json({
-            message: "Não foi possível adicionar o jogo"
-        })
-    }
-})
-
-app.put("/games/:id", async (req, res) => {
-    try {
-        const game = await Games.update(req.params.id, req.body);
-
-        if (!game) {
-            return res.status(404).json({ 
-                message: "Jogo não encontrado" 
-            });
-        }
-
-        res.status(200).json(game);
-    } catch(error) {
-        console.error("Erro ao alterar jogo: ", error);
-        res.status(500).json({
-           message: "Erro ao alterar jogo"
-        })
-    }
-});
-app.delete("/games/:id", async (req, res) => {
-    try {
-        const deleted = await Games.remove(req.params.id);
-
-        if (!deleted) {
-            return res.status(404).json({ 
-                message: "Jogo não encontrado" 
-            });
-        }
-
-        res.status(204).send();
-    } catch(error) {
-        console.error("Erro ao excluir jogo: ", error);
-        res.status(500).json({
-           message: "Erro ao excluir jogo"
-        })
-    }
-});
 
 //CRUD VENDEDORES
 app.get("/sellers", async (req, res) => {
