@@ -1,10 +1,10 @@
 import express from "express";
 import Games from "./models/Games.js";
 import Seller from "./models/Seller.js";
-import Customer from "./models/Customer.js";
 import Orders from "./models/Orders.js";
 import OrderItems from "./models/OrderItems.js";
 import GenresRoutes from "./routes/GenresRoutes.js";
+import CustomerRoutes from "./routes/CustomerRoutes.js";
 const app = express();
 
 app.use(express.json());
@@ -183,88 +183,8 @@ app.delete("/sellers/:id", async (req, res) => {
 app.use("/genres", GenresRoutes);
 
 //CRUD CLIENTES
-app.get("/customers", async (req, res) => {
-    try {
-        const customers = await Customer.findAll();
-        console.log(customers)
-        res.status(200).json(customers);
-    } catch(error) {
-        console.error("Erro ao buscar clientes: ", error);
-        res.status(500).json({
-           message: "Erro ao buscar clientes"
-        })
-    }
-});
 
-app.get("/customers/:id", async (req, res) => {
-    try {
-        const customer = await Customer.findById(req.params.id);
-
-        if (!customer) {
-            return res.status(404).json({
-                message: "Cliente não encontrado"
-            });
-        }
-
-        res.status(200).json(customer);
-    } catch(error) {
-        console.error("Erro ao buscar cliente: ", error);
-        res.status(500).json({
-           message: "Erro ao buscar cliente"
-        })
-    }
-});
-
-app.post("/customers", async(req, res) => {
-    try {
-        const customer = await Customer.create(req.body)
-
-        res.status(201).json(customer);
-    } catch(error) {
-        console.error("Erro ao adicionar cliente: ", error)
-
-        res.status(500).json({
-            message: "Não foi possível adicionar o cliente"
-        })
-    }
-})
-
-app.put("/customers/:id", async (req, res) => {
-    try {
-        const customer = await Customer.update(req.params.id, req.body);
-
-        if (!customer) {
-            return res.status(404).json({
-                message: "Cliente não encontrado"
-            });
-        }
-
-        res.status(200).json(customer);
-    } catch(error) {
-        console.error("Erro ao alterar cliente: ", error);
-        res.status(500).json({
-           message: "Erro ao alterar cliente"
-        })
-    }
-});
-app.delete("/customers/:id", async (req, res) => {
-    try {
-        const deleted = await Customer.remove(req.params.id);
-
-        if (!deleted) {
-            return res.status(404).json({
-                message: "Cliente não encontrado"
-            });
-        }
-
-        res.status(204).send();
-    } catch(error) {
-        console.error("Erro ao excluir cliente: ", error);
-        res.status(500).json({
-           message: "Erro ao excluir cliente"
-        })
-    }
-});
+app.use("/customers", CustomerRoutes);
 
 //CRUD PEDIDO DE VENDA
 app.get("/orders", async (req, res) => {
