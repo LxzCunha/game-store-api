@@ -25,8 +25,8 @@ app.use("/genres", GenresRoutes);
 app.use("/customers", CustomerRoutes);
 
 //CRUD PEDIDO DE VENDA
-app.use("/Orders", OrdersRoutes);
+app.use("/orders", OrdersRoutes);
 
 //CRUD ITENS DO PEDIDO
-app.use("/Order-Items", OrderItemsRoutes);  
+app.use("/order-items", OrderItemsRoutes);  
 export default app  

@@ -63,7 +63,7 @@ async function create(req: Request, res: Response) {
     try {
         const category = await Genres.create(req.body);
 
-        res.status(200).json(category);
+        res.status(201).json(category);
     } catch (error) {
         console.error("Erro ao criar gênero: ", error);
 

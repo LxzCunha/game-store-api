@@ -42,7 +42,7 @@ async function create(req: Request, res: Response) {
     try {
         const orderItem = await OrderItems.create(req.body);
 
-        res.status(200).json(orderItem);
+        res.status(201).json(orderItem);
     } catch (error) {
         console.error("Erro ao criar item do pedido: ", error);
 
