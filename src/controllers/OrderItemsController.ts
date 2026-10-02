@@ -38,6 +38,28 @@ async function getById(req: Request<{ id: string }>, res: Response) {
     }
 }
 
+async function getByOrder(req: Request<{ orderId: string }>, res: Response) {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+        return res.status(400).json({
+            message: "ID do Pedido não informado."
+        });
+    }
+
+    try {
+        const orderItems = await OrderItems.findByOrder(orderId);
+
+        res.status(200).json(orderItems);
+    } catch (error) {
+        console.error("Erro ao buscar itens do pedido: ", error);
+
+        res.status(500).json({
+            message: "Erro ao buscar itens do pedido.",
+        });
+    }
+}
+
 async function create(req: Request, res: Response) {
     try {
         const orderItem = await OrderItems.create(req.body);
@@ -108,6 +130,7 @@ async function remove(req: Request<{ id: string }>, res: Response) {
 export default {
     getAll,
     getById,
+    getByOrder,
     create,
     update,
     remove

@@ -98,24 +98,10 @@ async function remove(id: string) {
     return existing;
 }
 
-async function searchByKeyword(keyword: string) {
-    const { data, error } = await supabase
-    .from("seller")
-    .select("*")
-    .or(`name.ilike.%${keyword}%,email.ilike.%${keyword}%`);
-
-    if(error) {
-        throw error;
-    }
-
-    return data;
-}
-
 export default {
     findAll,
     findById,
     create,
     update,
-    remove,
-    searchByKeyword,
+    remove
 }

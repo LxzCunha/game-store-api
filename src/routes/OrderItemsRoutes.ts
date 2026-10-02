@@ -4,6 +4,7 @@ import OrderItems from "../controllers/OrderItemsController.js"
 const router = Router();
 
 router.get("/", OrderItems.getAll);
+router.get("/order/:orderId", OrderItems.getByOrder);
 router.get("/:id", OrderItems.getById);
 router.post("/", OrderItems.create);
 router.put("/:id", OrderItems.update);

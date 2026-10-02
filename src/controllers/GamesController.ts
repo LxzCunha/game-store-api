@@ -15,28 +15,6 @@ async function getAll(req: Request, res: Response) {
     }
 }
 
-async function getByKeyword(req: Request<{ keyword: string }>, res: Response) {
-    const { keyword } = req.params;
-
-    if (!keyword || typeof keyword != "string") {
-        res.status(400).json({
-            message: "Palavra-chave não informada."
-        })
-    }
-
-    try {
-        const games = await Games.searchByKeyword(keyword);
-
-        res.status(200).json(games);
-    } catch (error) {
-        console.error("Erro ao pesquisar por jogo: ", error);
-
-        res.status(500).json({
-            message: "Erro ao pesquisar jogo.",
-        });
-    }
-}
-
 async function getById(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
 
@@ -55,6 +33,28 @@ async function getById(req: Request<{ id: string }>, res: Response) {
 
         res.status(404).json({
             message: "Jogo não encontrado.",
+        });
+    }
+}
+
+async function getByGenre(req: Request<{ genreId: string }>, res: Response) {
+    const { genreId } = req.params;
+
+    if (!genreId) {
+        return res.status(400).json({
+            message: "ID do Gênero não informado."
+        });
+    }
+
+    try {
+        const games = await Games.findByGenre(genreId);
+
+        res.status(200).json(games);
+    } catch (error) {
+        console.error("Erro ao buscar jogos do gênero: ", error);
+
+        res.status(500).json({
+            message: "Erro ao buscar jogos do gênero.",
         });
     }
 }
@@ -129,7 +129,7 @@ async function remove(req: Request<{ id: string }>, res: Response) {
 export default {
     getAll,
     getById,
-    getByKeyword,
+    getByGenre,
     create,
     update,
     remove

@@ -37,6 +37,50 @@ async function getById(req: Request<{ id: string }>, res: Response) {
     }
 }
 
+async function getByCustomer(req: Request<{ customerId: string }>, res: Response) {
+    const { customerId } = req.params;
+
+    if (!customerId) {
+        return res.status(400).json({
+            message: "ID do Cliente não informado."
+        });
+    }
+
+    try {
+        const orders = await Orders.findByCustomer(customerId);
+
+        res.status(200).json(orders);
+    } catch (error) {
+        console.error("Erro ao buscar pedidos do cliente: ", error);
+
+        res.status(500).json({
+            message: "Erro ao buscar pedidos do cliente.",
+        });
+    }
+}
+
+async function getBySeller(req: Request<{ sellerId: string }>, res: Response) {
+    const { sellerId } = req.params;
+
+    if (!sellerId) {
+        return res.status(400).json({
+            message: "ID do Vendedor não informado."
+        });
+    }
+
+    try {
+        const orders = await Orders.findBySeller(sellerId);
+
+        res.status(200).json(orders);
+    } catch (error) {
+        console.error("Erro ao buscar pedidos do vendedor: ", error);
+
+        res.status(500).json({
+            message: "Erro ao buscar pedidos do vendedor.",
+        });
+    }
+}
+
 async function create(req: Request, res: Response) {
     try {
         const order = await Orders.create(req.body);
@@ -107,6 +151,8 @@ async function remove(req: Request<{ id: string }>, res: Response) {
 export default {
     getAll,
     getById,
+    getByCustomer,
+    getBySeller,
     create,
     update,
     remove

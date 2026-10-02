@@ -26,6 +26,32 @@ async function findById(id: string) {
     return data;
 }
 
+async function findByCustomer(customerId: string) {
+    const{data, error} = await supabase
+    .from("orders")
+    .select("*")
+    .eq("customer_id", customerId);
+
+    if(error) {
+        throw error;
+    }
+
+    return data;
+}
+
+async function findBySeller(sellerId: string) {
+    const{data, error} = await supabase
+    .from("orders")
+    .select("*")
+    .eq("seller_id", sellerId);
+
+    if(error) {
+        throw error;
+    }
+
+    return data;
+}
+
 async function create(order:{
     customer_id: string;
     seller_id: string;
@@ -89,6 +115,8 @@ async function remove(id: string) {
 export default {
     findAll,
     findById,
+    findByCustomer,
+    findBySeller,
     create,
     update,
     remove

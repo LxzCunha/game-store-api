@@ -15,28 +15,6 @@ async function getAll(req: Request, res: Response) {
     }
 }
 
-async function getByKeyword(req: Request<{ keyword: string }>, res: Response) {
-    const { keyword } = req.params;
-
-    if (!keyword || typeof keyword != "string") {
-        res.status(400).json({
-            message: "Palavra-chave não informada."
-        })
-    }
-
-    try {
-        const categories = await Customer.searchByKeyword(keyword);
-
-        res.status(200).json(categories);
-    } catch (error) {
-        console.error("Erro ao pesquisar por cliente: ", error);
-
-        res.status(500).json({
-            message: "Erro ao pesquisar cliente.",
-        });
-    }
-}
-
 async function getById(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
 
@@ -134,7 +112,6 @@ async function remove(req: Request<{ id: string }>, res: Response) {
 export default {
     getAll,
     getById,
-    getByKeyword,
     create,
     update,
     remove

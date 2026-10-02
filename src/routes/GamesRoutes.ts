@@ -4,7 +4,7 @@ import GamesController from "../controllers/GamesController.js"
 const router = Router();
 
 router.get("/", GamesController.getAll);
-router.get("/search/:keyword", GamesController.getByKeyword);
+router.get("/genre/:genreId", GamesController.getByGenre);
 router.get("/:id", GamesController.getById);
 router.post("/", GamesController.create);
 router.put("/:id", GamesController.update);

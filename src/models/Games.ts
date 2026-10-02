@@ -28,6 +28,19 @@ async function findById(id: string) {
     return data;
 }
 
+async function findByGenre(genreId: string) {
+    const{data, error} = await supabase
+    .from("games")
+    .select("*")
+    .eq("genre_id", genreId);
+
+    if(error) {
+        throw error;
+    }
+
+    return data;
+}
+
 async function create(game:{
     genre_id: string;
     title: string;
@@ -94,24 +107,11 @@ async function remove(id: string) {
     return data;
 }
 
-async function searchByKeyword(keyword: string) {
-    const { data, error} = await supabase
-    .from("games")
-    .select("*")
-    .or(`title.ilike.%${keyword}%`)
-
-    if(error) {
-        throw error;
-    }
-
-    return data;
-}
-
 export default {
     findAll,
     findById,
+    findByGenre,
     create,
     update,
-    remove,
-    searchByKeyword
+    remove
 }

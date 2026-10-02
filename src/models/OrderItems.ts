@@ -26,6 +26,19 @@ async function findById(id: string) {
     return data;
 }
 
+async function findByOrder(orderId: string) {
+    const{data, error} = await supabase
+    .from("order_items")
+    .select("*")
+    .eq("order_id", orderId);
+
+    if(error) {
+        throw error;
+    }
+
+    return data;
+}
+
 async function create(orderItem:{
     order_id: string;
     game_id: string;
@@ -85,6 +98,7 @@ async function remove(id: string) {
 export default {
     findAll,
     findById,
+    findByOrder,
     create,
     update,
     remove

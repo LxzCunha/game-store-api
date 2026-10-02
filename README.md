@@ -120,6 +120,7 @@ game-store-api/
 ├── .gitignore
 ├── package.json
 ├── tsconfig.json
+├── game-store-api.postman_collection.json  # collection do Postman com todos os endpoints
 └── README.md
 ```
 
@@ -165,6 +166,10 @@ npm run dev
 ```
 
 A API ficará disponível em `http://localhost:3030`.
+
+**6. Testar com o Postman (opcional)**
+
+No Postman, clique em **Import** e selecione o arquivo `game-store-api.postman_collection.json`, na raiz do projeto. A collection traz todos os endpoints já com corpos de exemplo. Os IDs ficam em variáveis da collection (`genreId`, `gameId`, `customerId`, `sellerId`, `orderId`, `orderItemId`): ao cadastrar um registro pelo `POST`, o ID retornado é salvo automaticamente na variável correspondente.
 
 ---
 
@@ -269,7 +274,7 @@ create table order_items (
 
 ## Documentação dos endpoints
 
-Todas as requisições e respostas utilizam **JSON**. Nas rotas com `:id`, o identificador deve ser um **UUID**. Os corpos das requisições de criação e atualização estão na seção [Exemplos de requisições](#-exemplos-de-requisições).
+Todas as requisições e respostas utilizam **JSON**. Nas rotas com `:id`, `:genreId`, `:customerId`, `:sellerId` e `:orderId`, o identificador deve ser um **UUID**. As rotas de listagem por relacionamento retornam uma lista vazia (`[]`) quando não há registros. Os corpos das requisições de criação e atualização estão na seção [Exemplos de requisições](#-exemplos-de-requisições).
 
 ### Gêneros
 
@@ -277,7 +282,6 @@ Todas as requisições e respostas utilizam **JSON**. Nas rotas com `:id`, o ide
 |---|---|---|---|
 | GET | `/genres` | Lista todos os gêneros | — |
 | GET | `/genres/:id` | Consulta um gênero pelo ID | `id` na URL |
-| GET | `/genres/search/:keyword` | Pesquisa gêneros por nome ou descrição | `keyword` na URL |
 | POST | `/genres` | Cadastra um novo gênero | JSON do gênero no corpo |
 | PUT | `/genres/:id` | Atualiza um gênero | `id` na URL e JSON do gênero no corpo |
 | DELETE | `/genres/:id` | Remove um gênero | `id` na URL |
@@ -288,7 +292,7 @@ Todas as requisições e respostas utilizam **JSON**. Nas rotas com `:id`, o ide
 |---|---|---|---|
 | GET | `/games` | Lista todos os jogos | — |
 | GET | `/games/:id` | Consulta um jogo pelo ID | `id` na URL |
-| GET | `/games/search/:keyword` | Pesquisa jogos pelo título | `keyword` na URL |
+| GET | `/games/genre/:genreId` | Lista todos os jogos de um gênero | `genreId` na URL |
 | POST | `/games` | Cadastra um novo jogo | JSON do jogo no corpo |
 | PUT | `/games/:id` | Atualiza um jogo | `id` na URL e JSON do jogo no corpo |
 | DELETE | `/games/:id` | Remove um jogo | `id` na URL |
@@ -299,7 +303,6 @@ Todas as requisições e respostas utilizam **JSON**. Nas rotas com `:id`, o ide
 |---|---|---|---|
 | GET | `/customers` | Lista todos os clientes | — |
 | GET | `/customers/:id` | Consulta um cliente pelo ID | `id` na URL |
-| GET | `/customers/search/:keyword` | Pesquisa clientes por nome ou e-mail | `keyword` na URL |
 | POST | `/customers` | Cadastra um novo cliente | JSON do cliente no corpo |
 | PUT | `/customers/:id` | Atualiza um cliente | `id` na URL e JSON do cliente no corpo |
 | DELETE | `/customers/:id` | Remove um cliente | `id` na URL |
@@ -310,7 +313,6 @@ Todas as requisições e respostas utilizam **JSON**. Nas rotas com `:id`, o ide
 |---|---|---|---|
 | GET | `/sellers` | Lista todos os vendedores | — |
 | GET | `/sellers/:id` | Consulta um vendedor pelo ID | `id` na URL |
-| GET | `/sellers/search/:keyword` | Pesquisa vendedores por nome ou e-mail | `keyword` na URL |
 | POST | `/sellers` | Cadastra um novo vendedor | JSON do vendedor no corpo |
 | PUT | `/sellers/:id` | Atualiza um vendedor | `id` na URL e JSON do vendedor no corpo |
 | DELETE | `/sellers/:id` | Remove um vendedor | `id` na URL |
@@ -321,6 +323,8 @@ Todas as requisições e respostas utilizam **JSON**. Nas rotas com `:id`, o ide
 |---|---|---|---|
 | GET | `/orders` | Lista todos os pedidos | — |
 | GET | `/orders/:id` | Consulta um pedido pelo ID | `id` na URL |
+| GET | `/orders/customer/:customerId` | Lista todos os pedidos de um cliente | `customerId` na URL |
+| GET | `/orders/seller/:sellerId` | Lista todos os pedidos de um vendedor | `sellerId` na URL |
 | POST | `/orders` | Cadastra um novo pedido | JSON do pedido no corpo |
 | PUT | `/orders/:id` | Atualiza um pedido | `id` na URL e JSON do pedido no corpo |
 | DELETE | `/orders/:id` | Remove um pedido | `id` na URL |
@@ -331,6 +335,7 @@ Todas as requisições e respostas utilizam **JSON**. Nas rotas com `:id`, o ide
 |---|---|---|---|
 | GET | `/order-items` | Lista todos os itens de pedido | — |
 | GET | `/order-items/:id` | Consulta um item pelo ID | `id` na URL |
+| GET | `/order-items/order/:orderId` | Lista todos os itens de um pedido | `orderId` na URL |
 | POST | `/order-items` | Adiciona um item a um pedido | JSON do item no corpo |
 | PUT | `/order-items/:id` | Atualiza um item | `id` na URL e JSON do item no corpo |
 | DELETE | `/order-items/:id` | Remove um item | `id` na URL |
