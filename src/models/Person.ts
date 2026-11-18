@@ -1,79 +1,82 @@
-import supabase from "../config/supabase.js";
+import { ValidationError } from "../errors/ValidationError.js";
+import { isOptionalText } from "./validation.js";
 
-export type Person = {
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export type PersonData = {
     name: string;
     email: string;
-    role: string;
-    phone: string;
-    address: string;
+    phone?: string | null;
+    address?: string | null;
 };
 
-async function findAll() {
-    const {data, error} = await supabase
-    .from("people")
-    .select("*");
+export type Role = "customer" | "seller";
 
-    if(error) {
-        throw error;
+export abstract class Person {
+    protected personId: string | undefined;
+    private name: string;
+    private email: string;
+    private phone: string | null;
+    private address: string | null;
+
+    constructor(data: PersonData) {
+        this.personId = undefined;
+        this.name = "";
+        this.email = "";
+        this.phone = null;
+        this.address = null;
+
+        this.rename(data.name);
+        this.changeEmail(data.email);
+
+        if (data.phone !== undefined) {
+            this.changePhone(data.phone);
+        }
+        if (data.address !== undefined) {
+            this.changeAddress(data.address);
+        }
     }
 
-    return data;
-}
+    abstract getRole(): Role;
 
-async function findById(id: string) {
-    const { data, error } = await supabase
-        .from("people")
-        .select("*")
-        .eq("id", id)
-        .single();
+    public getPersonId(): string | undefined {
+        return this.personId;
+    }
+    public getName(): string {
+        return this.name;
+    }
+    public getEmail(): string {
+        return this.email;
+    }
+    public getPhone(): string | null {
+        return this.phone;
+    }
+    public getAddress(): string | null {
+        return this.address;
+    }
 
-    if (error) throw error;
-
-    return data;
-}
-
-async function create(person: Person) {
-    const { data, error } = await supabase
-        .from("people")
-        .insert(person)
-        .select()
-        .single();
-
-    if (error) throw error;
-
-    return data;
-}
-
-async function update(id: string, person: Partial<Person>) {
-    const { data, error } = await supabase
-        .from("people")
-        .update(person)
-        .eq("id", id)
-        .select()
-        .single();
-
-    if (error) throw error;
-
-    return data;
-}
-
-async function remove(id: string) {
-    const { data, error } = await supabase
-        .from("people")
-        .delete()
-        .eq("id", id)
-        .select()
-        .single();
-
-    if (error) throw error;
-
-    return data;
-}
-
-export default {
-    findAll,
-    findById,
-    create,
-    update,
-    remove
+    rename(name: string): void {
+        if (typeof name !== "string" || name.trim().length === 0) {
+            throw new ValidationError("O nome é obrigatório.");
+        }
+        this.name = name.trim();
+    }
+    changeEmail(email: string): void {
+        if (typeof email !== "string" || !EMAIL.test(email.trim())) {
+            throw new ValidationError("Informe um e-mail válido.");
+        }
+        this.email = email.trim();
+    }
+    changePhone(phone: string | null): void {
+        if (!isOptionalText(phone)) {
+            throw new ValidationError("O telefone deve ser um texto.");
+        }
+        this.phone = phone;
+    }
+    changeAddress(address: string | null): void {
+        if (!isOptionalText(address)) {
+            throw new ValidationError("O endereço deve ser um texto.");
+        }
+        this.address = address;
+    }
 }

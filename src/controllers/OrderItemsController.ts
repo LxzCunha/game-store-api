@@ -1,40 +1,38 @@
 import type { Request, Response } from "express";
-import OrderItems from "../models/OrderItems.js";
+import OrderItemsRepository from "../repository/OrderItemsRepository.js";
+import { OrderItem } from "../models/OrderItems.js";
+import { sendError } from "./helpers.js";
+
+const ORDER_OR_GAME_NOT_FOUND = {
+    status: 400,
+    message: "O pedido ou o jogo informado não existe."
+} as const;
 
 async function getAll(req: Request, res: Response) {
     try {
-        const games = await OrderItems.findAll();
+        const orderItems = await OrderItemsRepository.findAll();
 
-        res.status(200).json(games);
+        res.status(200).json(orderItems);
     } catch (error) {
-        console.error("Erro ao buscar itens do pedido: ", error);
-
-        res.status(500).json({
-            message: "Erro ao buscar itens do pedido.",
-        });
+        sendError(res, error, "Erro ao buscar itens do pedido.");
     }
 }
-
 
 async function getById(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
 
     if (!id) {
-        res.status(404).json({
+        return res.status(400).json({
             message: "ID do Item do Pedido não informado."
-        })
+        });
     }
 
     try {
-        const orderItem = await OrderItems.findById(id);
+        const orderItem = await OrderItemsRepository.findById(id);
 
         res.status(200).json(orderItem);
     } catch (error) {
-        console.error("Erro ao buscar item do pedido: ", error);
-
-        res.status(404).json({
-            message: "Item do pedido não encontrado.",
-        });
+        sendError(res, error, "Erro ao buscar item do pedido.");
     }
 }
 
@@ -48,51 +46,57 @@ async function getByOrder(req: Request<{ orderId: string }>, res: Response) {
     }
 
     try {
-        const orderItems = await OrderItems.findByOrder(orderId);
+        const orderItems = await OrderItemsRepository.findByOrder(orderId);
 
         res.status(200).json(orderItems);
     } catch (error) {
-        console.error("Erro ao buscar itens do pedido: ", error);
-
-        res.status(500).json({
-            message: "Erro ao buscar itens do pedido.",
-        });
+        sendError(res, error, "Erro ao buscar itens do pedido.");
     }
 }
 
 async function create(req: Request, res: Response) {
     try {
-        const orderItem = await OrderItems.create(req.body);
+        const orderItem = new OrderItem(req.body ?? {});
 
-        res.status(201).json(orderItem);
+        const createdOrderItem = await OrderItemsRepository.create(orderItem);
+
+        res.status(201).json(createdOrderItem);
     } catch (error) {
-        console.error("Erro ao criar item do pedido: ", error);
-
-        res.status(500).json({
-            message: "Erro ao criar item do pedido.",
-        });
+        sendError(res, error, "Erro ao criar item do pedido.", ORDER_OR_GAME_NOT_FOUND);
     }
 }
 
 async function update(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
+    const body = req.body ?? {};
 
     if (!id) {
-        res.status(404).json({
+        return res.status(400).json({
             message: "ID do Item do Pedido não informado."
-        })
+        });
     }
 
     try {
-        const orderItem = await OrderItems.update(id, req.body);
+        const orderItem = await OrderItemsRepository.findById(id);
 
-        res.status(200).json(orderItem);
+        if (body.order_id !== undefined) {
+            orderItem.changeOrder(body.order_id);
+        }
+        if (body.game_id !== undefined) {
+            orderItem.changeGame(body.game_id);
+        }
+        if (body.quantity !== undefined) {
+            orderItem.changeQuantity(body.quantity);
+        }
+        if (body.unit_price !== undefined) {
+            orderItem.changeUnitPrice(body.unit_price);
+        }
+
+        const updatedOrderItem = await OrderItemsRepository.update(orderItem);
+
+        res.status(200).json(updatedOrderItem);
     } catch (error) {
-        console.error("Erro ao atualizar item do pedido: ", error);
-
-        res.status(500).json({
-            message: "Erro ao atualizar item do pedido.",
-        });
+        sendError(res, error, "Erro ao atualizar item do pedido.", ORDER_OR_GAME_NOT_FOUND);
     }
 }
 
@@ -100,30 +104,19 @@ async function remove(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
 
     if (!id) {
-        return res.status(404).json({
+        return res.status(400).json({
             message: "ID do Item do Pedido não informado."
         });
     }
 
     try {
-        await OrderItems.remove(id);
+        await OrderItemsRepository.remove(id);
 
-        return res.status(200).json({
+        res.status(200).json({
             message: "Item do pedido removido com sucesso.",
         });
-
-    } catch (error: any) {
-        console.error("Erro ao remover item do pedido: ", error);
-
-        if (error.code === "23503") {
-            return res.status(409).json({
-                message: "Não é possível remover este item do pedido, pois ele está vinculado a um pedido."
-            });
-        }
-
-        return res.status(500).json({
-            message: "Erro ao remover item do pedido.",
-        });
+    } catch (error) {
+        sendError(res, error, "Erro ao remover item do pedido.");
     }
 }
 

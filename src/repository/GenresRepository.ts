@@ -1,7 +1,9 @@
-import type { PostgrestError } from "@supabase/supabase-js";
 import supabase from "../config/supabase.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { Genre } from "../models/Genres.js";
+import { notFoundOrThrow } from "./helpers.js";
+
+const NOT_FOUND = "Gênero não encontrado.";
 
 type GenreRow = {
     id: string;
@@ -20,14 +22,6 @@ function toRow(genre: Genre) {
         description: genre.getDescription(),
         active: genre.isActive(),
     };
-}
-
-
-function notFoundOrThrow(error: PostgrestError): never {
-    if (error.code === "22P02") {
-        throw new NotFoundError("Gênero não encontrado.");
-    }
-    throw error;
 }
 
 async function findAll(): Promise<Genre[]> {
@@ -50,11 +44,11 @@ async function findById(id: string): Promise<Genre> {
         .maybeSingle();
 
     if (error) {
-        notFoundOrThrow(error);
+        notFoundOrThrow(error, NOT_FOUND);
     }
 
     if (!data) {
-        throw new NotFoundError("Gênero não encontrado.");
+        throw new NotFoundError(NOT_FOUND);
     }
 
     return toGenre(data);
@@ -89,11 +83,11 @@ async function update(genre: Genre): Promise<Genre> {
         .maybeSingle();
 
     if (error) {
-        notFoundOrThrow(error);
+        notFoundOrThrow(error, NOT_FOUND);
     }
 
     if (!data) {
-        throw new NotFoundError("Gênero não encontrado.");
+        throw new NotFoundError(NOT_FOUND);
     }
 
     return toGenre(data);
@@ -108,11 +102,11 @@ async function remove(id: string): Promise<Genre> {
         .maybeSingle();
 
     if (error) {
-        notFoundOrThrow(error);
+        notFoundOrThrow(error, NOT_FOUND);
     }
 
     if (!data) {
-        throw new NotFoundError("Gênero não encontrado.");
+        throw new NotFoundError(NOT_FOUND);
     }
 
     return toGenre(data);

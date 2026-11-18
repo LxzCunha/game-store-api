@@ -1,38 +1,7 @@
 import type { Request, Response } from "express";
 import GenresRepository from "../repository/GenresRepository.js";
 import { Genre } from "../models/Genres.js";
-import { ValidationError } from "../errors/ValidationError.js";
-import { NotFoundError } from "../errors/NotFoundError.js";
-
-function sendError(res: Response, error: unknown, message: string) {
-    console.error(`${message} `, error);
-
-    if (error instanceof ValidationError) {
-        return res.status(400).json({ message: error.message });
-    }
-
-    if (error instanceof NotFoundError) {
-        return res.status(404).json({ message: error.message });
-    }
-
-    return res.status(500).json({ message });
-}
-
-function applyActive(genre: Genre, active: unknown) {
-    if (active === undefined) {
-        return;
-    }
-
-    if (typeof active !== "boolean") {
-        throw new ValidationError("O campo active deve ser true ou false.");
-    }
-
-    if (active) {
-        genre.activate();
-    } else {
-        genre.deactivate();
-    }
-}
+import { applyActive, sendError } from "./helpers.js";
 
 async function getAll(req: Request, res: Response) {
     try {
@@ -123,16 +92,11 @@ async function remove(req: Request<{ id: string }>, res: Response) {
         res.status(200).json({
             message: "Gênero removido com sucesso.",
         });
-    } catch (error: any) {
-        if (error?.code === "23503") {
-            console.error("Erro ao remover gênero: ", error);
-
-            return res.status(409).json({
-                message: "Não é possível remover este gênero pois existem jogos vinculados a ele."
-            });
-        }
-
-        sendError(res, error, "Erro ao remover gênero.");
+    } catch (error) {
+        sendError(res, error, "Erro ao remover gênero.", {
+            status: 409,
+            message: "Não é possível remover este gênero pois existem jogos vinculados a ele."
+        });
     }
 }
 

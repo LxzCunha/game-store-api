@@ -1,17 +1,20 @@
 import type { Request, Response } from "express";
-import Orders  from "../models/Orders.js";
+import OrdersRepository from "../repository/OrdersRepository.js";
+import { Order } from "../models/Orders.js";
+import { applyActive, sendError } from "./helpers.js";
+
+const CUSTOMER_OR_SELLER_NOT_FOUND = {
+    status: 400,
+    message: "O cliente ou o vendedor informado não existe."
+} as const;
 
 async function getAll(req: Request, res: Response) {
     try {
-        const orders = await Orders.findAll();
+        const orders = await OrdersRepository.findAll();
 
         res.status(200).json(orders);
     } catch (error) {
-        console.error("Erro ao buscar pedidos: ", error);
-
-        res.status(500).json({
-            message: "Erro ao buscar pedidos.",
-        });
+        sendError(res, error, "Erro ao buscar pedidos.");
     }
 }
 
@@ -19,21 +22,17 @@ async function getById(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
 
     if (!id) {
-        res.status(404).json({
+        return res.status(400).json({
             message: "ID do Pedido não informado."
-        })
+        });
     }
 
     try {
-        const order = await Orders.findById(id);
+        const order = await OrdersRepository.findById(id);
 
         res.status(200).json(order);
     } catch (error) {
-        console.error("Erro ao buscar pedido: ", error);
-
-        res.status(404).json({
-            message: "Pedido não encontrado.",
-        });
+        sendError(res, error, "Erro ao buscar pedido.");
     }
 }
 
@@ -47,15 +46,11 @@ async function getByCustomer(req: Request<{ customerId: string }>, res: Response
     }
 
     try {
-        const orders = await Orders.findByCustomer(customerId);
+        const orders = await OrdersRepository.findByCustomer(customerId);
 
         res.status(200).json(orders);
     } catch (error) {
-        console.error("Erro ao buscar pedidos do cliente: ", error);
-
-        res.status(500).json({
-            message: "Erro ao buscar pedidos do cliente.",
-        });
+        sendError(res, error, "Erro ao buscar pedidos do cliente.");
     }
 }
 
@@ -69,51 +64,65 @@ async function getBySeller(req: Request<{ sellerId: string }>, res: Response) {
     }
 
     try {
-        const orders = await Orders.findBySeller(sellerId);
+        const orders = await OrdersRepository.findBySeller(sellerId);
 
         res.status(200).json(orders);
     } catch (error) {
-        console.error("Erro ao buscar pedidos do vendedor: ", error);
-
-        res.status(500).json({
-            message: "Erro ao buscar pedidos do vendedor.",
-        });
+        sendError(res, error, "Erro ao buscar pedidos do vendedor.");
     }
 }
 
 async function create(req: Request, res: Response) {
+    const body = req.body ?? {};
+
     try {
-        const order = await Orders.create(req.body);
+        const order = new Order(body);
+        applyActive(order, body.active);
 
-        res.status(201).json(order);
+        const createdOrder = await OrdersRepository.create(order);
+
+        res.status(201).json(createdOrder);
     } catch (error) {
-        console.error("Erro ao criar pedido: ", error);
-
-        res.status(500).json({
-            message: "Erro ao criar pedido.",
-        });
+        sendError(res, error, "Erro ao criar pedido.", CUSTOMER_OR_SELLER_NOT_FOUND);
     }
 }
 
 async function update(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
+    const body = req.body ?? {};
 
     if (!id) {
-        res.status(404).json({
+        return res.status(400).json({
             message: "ID do Pedido não informado."
-        })
+        });
     }
 
     try {
-        const order = await Orders.update(id, req.body);
+        const order = await OrdersRepository.findById(id);
 
-        res.status(200).json(order);
+        if (body.customer_id !== undefined) {
+            order.changeCustomer(body.customer_id);
+        }
+        if (body.seller_id !== undefined) {
+            order.changeSeller(body.seller_id);
+        }
+        if (body.order_date !== undefined) {
+            order.changeOrderDate(body.order_date);
+        }
+        if (body.status !== undefined) {
+            order.changeStatus(body.status);
+        }
+        if (body.total !== undefined) {
+            order.changeTotal(body.total);
+        }
+
+        applyActive(order, body.active);
+
+        const updatedOrder = await OrdersRepository.update(order);
+
+        res.status(200).json(updatedOrder);
     } catch (error) {
-        console.error("Erro ao atualizar pedido: ", error);
-
-        res.status(500).json({
-            message: "Erro ao atualizar pedido.",
-        });
+        sendError(res, error, "Erro ao atualizar pedido.", CUSTOMER_OR_SELLER_NOT_FOUND);
     }
 }
 
@@ -121,29 +130,21 @@ async function remove(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
 
     if (!id) {
-        return res.status(404).json({
+        return res.status(400).json({
             message: "ID do Pedido não informado."
         });
     }
 
     try {
-        await Orders.remove(id);
+        await OrdersRepository.remove(id);
 
-        return res.status(200).json({
+        res.status(200).json({
             message: "Pedido removido com sucesso.",
         });
-
-    } catch (error: any) {
-        console.error("Erro ao remover pedido: ", error);
-
-        if (error.code === "23503") {
-            return res.status(409).json({
-                message: "Não é possível remover este pedido, pois ele está vinculado a um item pedido."
-            });
-        }
-
-        return res.status(500).json({
-            message: "Erro ao remover pedido.",
+    } catch (error) {
+        sendError(res, error, "Erro ao remover pedido.", {
+            status: 409,
+            message: "Não é possível remover este pedido, pois ele está vinculado a um item pedido."
         });
     }
 }

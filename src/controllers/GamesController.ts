@@ -1,17 +1,20 @@
 import type { Request, Response } from "express";
-import Games from "../models/Games.js";
+import GamesRepository from "../repository/GamesRepository.js";
+import { Game } from "../models/Games.js";
+import { applyActive, sendError } from "./helpers.js";
+
+const GENRE_NOT_FOUND = {
+    status: 400,
+    message: "O gênero informado não existe."
+} as const;
 
 async function getAll(req: Request, res: Response) {
     try {
-        const games = await Games.findAll();
+        const games = await GamesRepository.findAll();
 
         res.status(200).json(games);
     } catch (error) {
-        console.error("Erro ao buscar jogos: ", error);
-
-        res.status(500).json({
-            message: "Erro ao buscar jogos.",
-        });
+        sendError(res, error, "Erro ao buscar jogos.");
     }
 }
 
@@ -19,21 +22,17 @@ async function getById(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
 
     if (!id) {
-        res.status(404).json({
+        return res.status(400).json({
             message: "ID do Jogo não informado."
-        })
+        });
     }
 
     try {
-        const game = await Games.findById(id);
+        const game = await GamesRepository.findById(id);
 
         res.status(200).json(game);
     } catch (error) {
-        console.error("Erro ao buscar jogo: ", error);
-
-        res.status(404).json({
-            message: "Jogo não encontrado.",
-        });
+        sendError(res, error, "Erro ao buscar jogo.");
     }
 }
 
@@ -47,51 +46,74 @@ async function getByGenre(req: Request<{ genreId: string }>, res: Response) {
     }
 
     try {
-        const games = await Games.findByGenre(genreId);
+        const games = await GamesRepository.findByGenre(genreId);
 
         res.status(200).json(games);
     } catch (error) {
-        console.error("Erro ao buscar jogos do gênero: ", error);
-
-        res.status(500).json({
-            message: "Erro ao buscar jogos do gênero.",
-        });
+        sendError(res, error, "Erro ao buscar jogos do gênero.");
     }
 }
 
 async function create(req: Request, res: Response) {
+    const body = req.body ?? {};
+
     try {
-        const game = await Games.create(req.body);
+        const game = new Game(body);
+        applyActive(game, body.active);
 
-        res.status(201).json(game);
+        const createdGame = await GamesRepository.create(game);
+
+        res.status(201).json(createdGame);
     } catch (error) {
-        console.error("Erro ao criar jogo: ", error);
-
-        res.status(500).json({
-            message: "Erro ao criar jogo.",
-        });
+        sendError(res, error, "Erro ao criar jogo.", GENRE_NOT_FOUND);
     }
 }
 
 async function update(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
+    const body = req.body ?? {};
 
     if (!id) {
-        res.status(404).json({
+        return res.status(400).json({
             message: "ID do Jogo não informado."
-        })
+        });
     }
 
     try {
-        const game = await Games.update(id, req.body);
+        const game = await GamesRepository.findById(id);
 
-        res.status(200).json(game);
+        if (body.genre_id !== undefined) {
+            game.changeGenre(body.genre_id);
+        }
+        if (body.title !== undefined) {
+            game.rename(body.title);
+        }
+        if (body.description !== undefined) {
+            game.changeDescription(body.description);
+        }
+        if (body.price !== undefined) {
+            game.changePrice(body.price);
+        }
+        if (body.stock_quantity !== undefined) {
+            game.changeStockQuantity(body.stock_quantity);
+        }
+        if (body.release_date !== undefined) {
+            game.changeReleaseDate(body.release_date);
+        }
+        if (body.developer !== undefined) {
+            game.changeDeveloper(body.developer);
+        }
+        if (body.image !== undefined) {
+            game.changeImage(body.image);
+        }
+
+        applyActive(game, body.active);
+
+        const updatedGame = await GamesRepository.update(game);
+
+        res.status(200).json(updatedGame);
     } catch (error) {
-        console.error("Erro ao atualizar jogo: ", error);
-
-        res.status(500).json({
-            message: "Erro ao atualizar jogo.",
-        });
+        sendError(res, error, "Erro ao atualizar jogo.", GENRE_NOT_FOUND);
     }
 }
 
@@ -99,29 +121,21 @@ async function remove(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
 
     if (!id) {
-        return res.status(404).json({
+        return res.status(400).json({
             message: "ID do Jogo não informado."
         });
     }
 
     try {
-        await Games.remove(id);
+        await GamesRepository.remove(id);
 
-        return res.status(200).json({
+        res.status(200).json({
             message: "Jogo removido com sucesso.",
         });
-
-    } catch (error: any) {
-        console.error("Erro ao remover jogo: ", error);
-
-        if (error.code === "23503") {
-            return res.status(409).json({
-                message: "Não é possível remover este jogo, pois ele está vinculado a um pedido."
-            });
-        }
-
-        return res.status(500).json({
-            message: "Erro ao remover jogo.",
+    } catch (error) {
+        sendError(res, error, "Erro ao remover jogo.", {
+            status: 409,
+            message: "Não é possível remover este jogo, pois ele está vinculado a um pedido."
         });
     }
 }
