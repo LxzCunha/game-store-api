@@ -18,7 +18,7 @@ async function findById(id: string) {
     .from("genres")
     .select("*")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
     if(error){
         throw error;
@@ -57,7 +57,7 @@ async function update(
     .update(genre)
     .eq("id", id)
     .select()
-    .single();
+    .maybeSingle();
 
     if(error) {
         throw error;

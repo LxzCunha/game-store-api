@@ -19,7 +19,7 @@ async function findById(id: string) {
         .from("games")
         .select("*")
         .eq("id", id)
-        .single();
+        .maybeSingle();
 
     if (error) {
         throw error;
@@ -83,7 +83,7 @@ async function update(
         .update(game)
         .eq("id", id)
         .select()
-        .single();
+        .maybeSingle();
 
     if (error) {
         throw error;
@@ -98,7 +98,7 @@ async function remove(id: string) {
         .delete()
         .eq("id", id)
         .select()
-        .single();
+        .maybeSingle();
 
     if (error) {
         throw error;
