@@ -26,7 +26,7 @@ async function findById(id: string) {
         .from("sellers")
         .select("id, person_id, hire_date, person:people(*)")
         .eq("id", id)
-        .single();
+        .maybeSingle();
 
     if (error){
         throw error;
@@ -67,12 +67,15 @@ async function update(id: string, seller: Partial<Seller>) {
     const { hire_date, role, ...personData } = seller;
 
     if (hire_date !== undefined) {
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from("sellers")
             .update({ hire_date })
-            .eq("id", id);
+            .eq("id", id)
+            .select("id")
+            .maybeSingle();
 
         if (error) throw error;
+        if (!data) return null;
     }
 
     if (Object.keys(personData).length) {
@@ -86,12 +89,15 @@ async function remove(id: string) {
     const existing = await findById(id);
     if (!existing) return null;
 
-    const { error } = await supabase
+    const { data, error } = await supabase
         .from("sellers")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
 
     if (error) throw error;
+    if (!data) return null;
 
     await PersonModel.remove(existing.person_id);
 

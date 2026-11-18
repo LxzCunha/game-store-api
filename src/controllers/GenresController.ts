@@ -1,110 +1,77 @@
 import type { Request, Response } from "express";
 import Genres from "../models/Genres.js";
+import { respondToError } from "../http/errors.js";
+import { validateBody, validateId, writeFields } from "../http/validation.js";
 
-async function getAll(req: Request, res: Response) {
+const writeErrors = { validateInput: true } as const;
+
+async function getAll(_req: Request, res: Response) {
     try {
-        const categories = await Genres.findAll();
-
-        res.status(200).json(categories);
+        const records = await Genres.findAll();
+        return res.status(200).json(records);
     } catch (error) {
-        console.error("Erro ao buscar gênero: ", error);
-
-        res.status(500).json({
-            message: "Erro ao buscar gênero.",
-        });
+        return respondToError(res, error, "Erro ao buscar gênero.");
     }
 }
 
 async function getById(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-
-    if (!id) {
-        res.status(404).json({
-            message: "ID do Gênero não informado."
-        })
-    }
+    if (!validateId(res, id, "do gênero")) return;
 
     try {
-        const category = await Genres.findById(id);
+        const record = await Genres.findById(id);
+        if (record === null) {
+            return res.status(404).json({ message: "Gênero não encontrado." });
+        }
 
-        res.status(200).json(category);
+        return res.status(200).json(record);
     } catch (error) {
-        console.error("Erro ao buscar gênero: ", error);
-
-        res.status(404).json({
-            message: "Gênero não encontrada.",
-        });
+        return respondToError(res, error, "Erro ao buscar gênero.");
     }
 }
 
 async function create(req: Request, res: Response) {
+    if (!validateBody(res, req.body, writeFields.genres, { create: true })) return;
+
     try {
-        const category = await Genres.create(req.body);
-
-        res.status(201).json(category);
+        const record = await Genres.create(req.body);
+        return res.status(201).json(record);
     } catch (error) {
-        console.error("Erro ao criar gênero: ", error);
-
-        res.status(500).json({
-            message: "Erro ao criar gênero.",
-        });
+        return respondToError(res, error, "Erro ao criar gênero.", writeErrors);
     }
 }
 
 async function update(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-
-    if (!id) {
-        res.status(404).json({
-            message: "ID do Gênero não informado."
-        })
-    }
+    if (!validateId(res, id, "do gênero")) return;
+    if (!validateBody(res, req.body, writeFields.genres, { create: false })) return;
 
     try {
-        const category = await Genres.update(id, req.body);
+        const record = await Genres.update(id, req.body);
+        if (record === null) {
+            return res.status(404).json({ message: "Gênero não encontrado." });
+        }
 
-        res.status(200).json(category);
+        return res.status(200).json(record);
     } catch (error) {
-        console.error("Erro ao atualizar gênero: ", error);
-
-        res.status(500).json({
-            message: "Erro ao atualizar gênero.",
-        });
+        return respondToError(res, error, "Erro ao atualizar gênero.", writeErrors);
     }
 }
 
 async function remove(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-
-    if (!id) {
-        return res.status(400).json({
-            message: "ID do Gênero não informado."
-        });
-    }
+    if (!validateId(res, id, "do gênero")) return;
 
     try {
         const deleted = await Genres.remove(id);
-
-        if (!deleted) {
-            return res.status(404).json({
-                message: "Gênero não encontrado para remoção."
-            });
+        if (deleted.length === 0) {
+            return res.status(404).json({ message: "Gênero não encontrado para remoção." });
         }
 
-        return res.status(200).json({
-            message: "Gênero removido com sucesso.",
-        });
-    } catch (error: any) {
-        console.error("Erro ao remover gênero: ", error);
-
-        if (error.code === "23503") {
-            return res.status(409).json({
-                message: "Não é possível remover este gênero pois existem jogos vinculados a ele."
-            });
-        }
-
-        return res.status(500).json({
-            message: "Erro ao remover gênero.",
+        return res.status(200).json({ message: "Gênero removido com sucesso." });
+    } catch (error) {
+        return respondToError(res, error, "Erro ao remover gênero.", {
+            foreignKey: "Não é possível remover este gênero pois existem jogos vinculados a ele.",
         });
     }
 }
@@ -114,5 +81,5 @@ export default {
     getById,
     create,
     update,
-    remove
-}
+    remove,
+};

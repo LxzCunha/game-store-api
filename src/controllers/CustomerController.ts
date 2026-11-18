@@ -1,110 +1,80 @@
 import type { Request, Response } from "express";
 import Customer from "../models/Customer.js";
+import { respondToError } from "../http/errors.js";
+import { validateBody, validateId, writeFields } from "../http/validation.js";
 
-async function getAll(req: Request, res: Response) {
+const writeErrors = {
+    validateInput: true,
+    unique: "Já existe um cadastro com o e-mail informado.",
+} as const;
+
+async function getAll(_req: Request, res: Response) {
     try {
-        const categories = await Customer.findAll();
-
-        res.status(200).json(categories);
+        const records = await Customer.findAll();
+        return res.status(200).json(records);
     } catch (error) {
-        console.error("Erro ao buscar cliente: ", error);
-
-        res.status(500).json({
-            message: "Erro ao buscar cliente.",
-        });
+        return respondToError(res, error, "Erro ao buscar cliente.");
     }
 }
 
 async function getById(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-
-    if (!id) {
-        res.status(404).json({
-            message: "ID do Cliente não informado."
-        })
-    }
+    if (!validateId(res, id, "do cliente")) return;
 
     try {
-        const category = await Customer.findById(id);
+        const record = await Customer.findById(id);
+        if (record === null) {
+            return res.status(404).json({ message: "Cliente não encontrado." });
+        }
 
-        res.status(200).json(category);
+        return res.status(200).json(record);
     } catch (error) {
-        console.error("Erro ao buscar cliente: ", error);
-
-        res.status(404).json({
-            message: "Cliente não encontrado.",
-        });
+        return respondToError(res, error, "Erro ao buscar cliente.");
     }
 }
 
 async function create(req: Request, res: Response) {
+    if (!validateBody(res, req.body, writeFields.customers, { create: true, ignoreRole: true })) return;
+
     try {
-        const category = await Customer.create(req.body);
-
-        res.status(201).json(category);
+        const record = await Customer.create(req.body);
+        return res.status(201).json(record);
     } catch (error) {
-        console.error("Erro ao criar cliente: ", error);
-
-        res.status(500).json({
-            message: "Erro ao criar cliente.",
-        });
+        return respondToError(res, error, "Erro ao criar cliente.", writeErrors);
     }
 }
 
 async function update(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-
-    if (!id) {
-        res.status(404).json({
-            message: "ID do Cliente não informado."
-        })
-    }
+    if (!validateId(res, id, "do cliente")) return;
+    if (!validateBody(res, req.body, writeFields.customers, { create: false, ignoreRole: true })) return;
 
     try {
-        const category = await Customer.update(id, req.body);
+        const record = await Customer.update(id, req.body);
+        if (record === null) {
+            return res.status(404).json({ message: "Cliente não encontrado." });
+        }
 
-        res.status(200).json(category);
+        return res.status(200).json(record);
     } catch (error) {
-        console.error("Erro ao atualizar cliente: ", error);
-
-        res.status(500).json({
-            message: "Erro ao atualizar cliente.",
-        });
+        return respondToError(res, error, "Erro ao atualizar cliente.", writeErrors);
     }
 }
 
 async function remove(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-
-    if (!id) {
-        return res.status(400).json({
-            message: "ID do Cliente não informado."
-        });
-    }
+    if (!validateId(res, id, "do cliente")) return;
 
     try {
         const deleted = await Customer.remove(id);
-
-        if (!deleted) {
-            return res.status(404).json({
-                message: "Cliente não encontrado para remoção."
-            });
+        if (deleted === null) {
+            return res.status(404).json({ message: "Cliente não encontrado para remoção." });
         }
 
-        return res.status(200).json({
-            message: "Cliente removido com sucesso.",
-        });
-    } catch (error: any) {
-        console.error("Erro ao remover cliente: ", error);
-
-        if (error.code === "23503") {
-            return res.status(409).json({
-                message: "Não é possível remover este cliente pois existem pedidos vinculados a ele."
-            });
-        }
-
-        return res.status(500).json({
-            message: "Erro ao remover cliente.",
+        return res.status(200).json({ message: "Cliente removido com sucesso." });
+    } catch (error) {
+        return respondToError(res, error, "Erro ao remover cliente.", {
+            foreignKey: "Não é possível remover este cliente pois existem pedidos vinculados a ele.",
         });
     }
 }
@@ -114,5 +84,5 @@ export default {
     getById,
     create,
     update,
-    remove
-}
+    remove,
+};

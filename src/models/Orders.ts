@@ -17,7 +17,7 @@ async function findById(id: string) {
     .from("orders")
     .select("*")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
     if(error){
         throw error;
@@ -88,7 +88,7 @@ async function update(
     .update(order)
     .eq("id", id)
     .select()
-    .single();
+    .maybeSingle();
 
     if(error) {
         throw error;
@@ -103,7 +103,7 @@ async function remove(id: string) {
     .delete()
     .eq("id", id)
     .select()
-    .single();
+    .maybeSingle();
 
     if(error){
         throw error;
