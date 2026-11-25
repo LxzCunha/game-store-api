@@ -1,6 +1,7 @@
 import type { Response } from "express";
 import { ValidationError } from "../errors/ValidationError.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
+import { ConflictError } from "../errors/ConflictError.js";
 
 type ForeignKeyResponse = {
     status: 400 | 409;
@@ -16,6 +17,10 @@ export function sendError(res: Response, error: unknown, message: string, foreig
 
     if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
+    }
+
+    if (error instanceof ConflictError) {
+        return res.status(409).json({ message: error.message });
     }
 
     if (foreignKey && (error as { code?: string } | null)?.code === "23503") {

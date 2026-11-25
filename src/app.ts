@@ -5,6 +5,7 @@ import gamesRoutes from "./routes/GamesRoutes.js";
 import GenresRoutes from "./routes/GenresRoutes.js";
 import CustomerRoutes from "./routes/CustomerRoutes.js";
 import SellerRoutes from "./routes/SellerRoutes.js";
+import { handleInvalidRequest } from "./http/errors.js";
 const app = express();
 
 app.use(express.json());
@@ -28,5 +29,8 @@ app.use("/customers", CustomerRoutes);
 app.use("/orders", OrdersRoutes);
 
 //CRUD ITENS DO PEDIDO
-app.use("/order-items", OrderItemsRoutes);  
-export default app  
+app.use("/order-items", OrderItemsRoutes);
+
+app.use(handleInvalidRequest);
+
+export default app;

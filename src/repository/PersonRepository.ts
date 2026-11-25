@@ -1,5 +1,14 @@
+import type { PostgrestError } from "@supabase/supabase-js";
 import supabase from "../config/supabase.js";
+import { ConflictError } from "../errors/ConflictError.js";
 import type { Person } from "../models/Person.js";
+
+function conflictOrThrow(error: PostgrestError): never {
+    if (error.code === "23505") {
+        throw new ConflictError("Já existe um cadastro com o e-mail informado.");
+    }
+    throw error;
+}
 
 function toRow(person: Person) {
     return {
@@ -19,7 +28,7 @@ async function create(person: Person): Promise<string> {
         .single();
 
     if (error) {
-        throw error;
+        conflictOrThrow(error);
     }
 
     return data.id;
@@ -38,7 +47,7 @@ async function update(person: Person): Promise<void> {
         .eq("id", personId);
 
     if (error) {
-        throw error;
+        conflictOrThrow(error);
     }
 }
 
