@@ -1,12 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import request from "supertest";
-import OrderItems from "../models/OrderItems.js";
+import OrderItemsRepository from "../repository/OrderItemsRepository.js";
+import { OrderItem } from "../models/OrderItems.js";
+import { NotFoundError } from "../errors/NotFoundError.js";
 
 vi.mock("../config/supabase.js", () => ({
   default: {},
 }));
 
-vi.mock("../models/OrderItems.js", () => ({
+vi.mock("../repository/OrderItemsRepository.js", () => ({
   default: {
     findAll: vi.fn(),
     findById: vi.fn(),
@@ -19,101 +21,215 @@ vi.mock("../models/OrderItems.js", () => ({
 
 import app from "../app.js";
 
-const id = "item-1";
+const ID = "11111111-1111-4111-8111-111111111111";
+const ORDER_ID = "22222222-2222-4222-8222-222222222222";
+const GAME_ID = "33333333-3333-4333-8333-333333333333";
+
 const basePath = "/order-items";
-const recordPath = `${basePath}/${id}`;
+const recordPath = `${basePath}/${ID}`;
 const newRecord = {
-  order_id: "order-1",
-  game_id: "game-1",
+  order_id: ORDER_ID,
+  game_id: GAME_ID,
   quantity: 1,
-  unit_price: 149.90,
+  unit_price: 149.9,
 };
-const record = { id, ...newRecord };
+const record = { id: ID, ...newRecord };
 const changes = { ...newRecord, quantity: 2, unit_price: 0 };
+const orderItem = () => OrderItem.restore(record);
+
+const validationCases = [
+  { label: "o order_id não for informado", body: { order_id: undefined }, message: "O pedido do item (order_id) deve ser um UUID válido." },
+  { label: "o order_id não for um UUID", body: { order_id: "order-1" }, message: "O pedido do item (order_id) deve ser um UUID válido." },
+  { label: "o game_id não for informado", body: { game_id: undefined }, message: "O jogo do item (game_id) deve ser um UUID válido." },
+  { label: "o game_id não for um UUID", body: { game_id: "game-1" }, message: "O jogo do item (game_id) deve ser um UUID válido." },
+  { label: "a quantidade não for informada", body: { quantity: undefined }, message: "A quantidade deve ser um número inteiro maior que zero." },
+  { label: "a quantidade for zero", body: { quantity: 0 }, message: "A quantidade deve ser um número inteiro maior que zero." },
+  { label: "a quantidade for fracionária", body: { quantity: 1.5 }, message: "A quantidade deve ser um número inteiro maior que zero." },
+  { label: "a quantidade não for numérica", body: { quantity: "2" }, message: "A quantidade deve ser um número inteiro maior que zero." },
+  { label: "o preço unitário não for informado", body: { unit_price: undefined }, message: "O preço unitário deve ser um número maior ou igual a zero." },
+  { label: "o preço unitário for negativo", body: { unit_price: -1 }, message: "O preço unitário deve ser um número maior ou igual a zero." },
+  { label: "o preço unitário não for numérico", body: { unit_price: "149.90" }, message: "O preço unitário deve ser um número maior ou igual a zero." },
+];
 
 describe("OrderItems - Testes de Integração", () => {
   beforeEach(() => {
-    vi.resetAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
+    vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 
-  it("deve retornar status 200 e listar os registros", async () => {
-    vi.mocked(OrderItems.findAll).mockResolvedValueOnce([record]);
+  it("deve retornar status 200 e listar os itens do pedido", async () => {
+    vi.mocked(OrderItemsRepository.findAll).mockResolvedValueOnce([orderItem()]);
 
     const response = await request(app).get(basePath);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([record]);
-    expect(OrderItems.findAll).toHaveBeenCalledExactlyOnceWith();
+    expect(OrderItemsRepository.findAll).toHaveBeenCalledOnce();
   });
 
-  it("deve retornar status 200 ao buscar um registro pelo ID", async () => {
-    vi.mocked(OrderItems.findById).mockResolvedValueOnce(record);
+  it("deve retornar status 200 ao buscar um item do pedido pelo ID", async () => {
+    vi.mocked(OrderItemsRepository.findById).mockResolvedValueOnce(orderItem());
 
     const response = await request(app).get(recordPath);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual(record);
-    expect(OrderItems.findById).toHaveBeenCalledExactlyOnceWith(id);
+    expect(OrderItemsRepository.findById).toHaveBeenCalledWith(ID);
   });
 
-  it("deve retornar status 404 quando a busca por ID não encontrar um registro", async () => {
-    const error = Object.assign(new Error("Nenhum registro encontrado"), { code: "PGRST116" });
-    vi.mocked(OrderItems.findById).mockRejectedValueOnce(error);
+  it("deve retornar status 404 quando o item do pedido não existir", async () => {
+    vi.mocked(OrderItemsRepository.findById).mockRejectedValueOnce(new NotFoundError("Item do pedido não encontrado."));
 
     const response = await request(app).get(recordPath);
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ message: "Item do pedido não encontrado." });
-    expect(OrderItems.findById).toHaveBeenCalledExactlyOnceWith(id);
+    expect(OrderItemsRepository.findById).toHaveBeenCalledWith(ID);
   });
 
-  it("deve retornar status 201 ao criar um registro", async () => {
-    vi.mocked(OrderItems.create).mockResolvedValueOnce(record);
+  it("deve retornar status 201 ao criar um item do pedido", async () => {
+    vi.mocked(OrderItemsRepository.create).mockImplementationOnce(async (created) =>
+      OrderItem.restore({
+        id: ID,
+        order_id: created.getOrderId(),
+        game_id: created.getGameId(),
+        quantity: created.getQuantity(),
+        unit_price: created.getUnitPrice(),
+      })
+    );
 
     const response = await request(app).post(basePath).send(newRecord);
 
     expect(response.status).toBe(201);
     expect(response.body).toEqual(record);
-    expect(OrderItems.create).toHaveBeenCalledExactlyOnceWith(newRecord);
+
+    const created = vi.mocked(OrderItemsRepository.create).mock.calls[0]?.[0];
+    expect(created).toBeInstanceOf(OrderItem);
+    expect(created?.toJSON()).toEqual({ id: undefined, ...newRecord });
   });
 
-  it("deve retornar status 200 ao atualizar um registro", async () => {
-    const savedRecord = { ...record, ...changes };
-    vi.mocked(OrderItems.update).mockResolvedValueOnce(savedRecord);
+  it.each(validationCases)("deve retornar status 400 e não gravar quando $label", async ({ body, message }) => {
+    const response = await request(app).post(basePath).send({ ...newRecord, ...body });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ message });
+    expect(OrderItemsRepository.create).not.toHaveBeenCalled();
+  });
+
+  it("deve retornar status 400 quando o corpo da requisição for vazio", async () => {
+    const response = await request(app).post(basePath);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ message: "O pedido do item (order_id) deve ser um UUID válido." });
+    expect(OrderItemsRepository.create).not.toHaveBeenCalled();
+  });
+
+  it("deve retornar status 400 quando o JSON for malformado", async () => {
+    const response = await request(app)
+      .post(basePath)
+      .set("Content-Type", "application/json")
+      .send('{"order_id": ');
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ message: "Requisição inválida." });
+  });
+
+  it("deve retornar status 400 quando o pedido ou o jogo não existir ao criar", async () => {
+    vi.mocked(OrderItemsRepository.create).mockRejectedValueOnce({ code: "23503", message: "foreign key" });
+
+    const response = await request(app).post(basePath).send(newRecord);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ message: "O pedido ou o jogo informado não existe." });
+  });
+
+  it("deve retornar status 200 ao atualizar um item do pedido", async () => {
+    vi.mocked(OrderItemsRepository.findById).mockResolvedValueOnce(orderItem());
+    vi.mocked(OrderItemsRepository.update).mockImplementationOnce(async (updated) => updated);
 
     const response = await request(app).put(recordPath).send(changes);
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual(savedRecord);
-    expect(OrderItems.update).toHaveBeenCalledExactlyOnceWith(id, changes);
+    expect(response.body).toEqual({ ...record, ...changes });
+    expect(OrderItemsRepository.findById).toHaveBeenCalledWith(ID);
+    expect(vi.mocked(OrderItemsRepository.update).mock.calls[0]?.[0].toJSON()).toEqual({ ...record, ...changes });
   });
 
-  it("deve retornar status 200 ao remover um registro", async () => {
-    vi.mocked(OrderItems.remove).mockResolvedValueOnce(record);
+  it("deve retornar status 200 ao atualizar só os campos enviados", async () => {
+    vi.mocked(OrderItemsRepository.findById).mockResolvedValueOnce(orderItem());
+    vi.mocked(OrderItemsRepository.update).mockImplementationOnce(async (updated) => updated);
+
+    const response = await request(app).put(recordPath).send({ quantity: 3 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ...record, quantity: 3 });
+  });
+
+  it("deve retornar status 404 ao atualizar um item do pedido que não existe", async () => {
+    vi.mocked(OrderItemsRepository.findById).mockRejectedValueOnce(new NotFoundError("Item do pedido não encontrado."));
+
+    const response = await request(app).put(recordPath).send(changes);
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ message: "Item do pedido não encontrado." });
+    expect(OrderItemsRepository.update).not.toHaveBeenCalled();
+  });
+
+  it.each(
+    validationCases.filter(({ body }) => Object.values(body).every((value) => value !== undefined))
+  )("deve retornar status 400 e não gravar a atualização quando $label", async ({ body, message }) => {
+    vi.mocked(OrderItemsRepository.findById).mockResolvedValueOnce(orderItem());
+
+    const response = await request(app).put(recordPath).send(body);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ message });
+    expect(OrderItemsRepository.update).not.toHaveBeenCalled();
+  });
+
+  it("deve retornar status 400 quando o pedido ou o jogo não existir ao atualizar", async () => {
+    vi.mocked(OrderItemsRepository.findById).mockResolvedValueOnce(orderItem());
+    vi.mocked(OrderItemsRepository.update).mockRejectedValueOnce({ code: "23503", message: "foreign key" });
+
+    const response = await request(app).put(recordPath).send({ game_id: "44444444-4444-4444-8444-444444444444" });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ message: "O pedido ou o jogo informado não existe." });
+  });
+
+  it("deve retornar status 200 ao remover um item do pedido", async () => {
+    vi.mocked(OrderItemsRepository.remove).mockResolvedValueOnce(orderItem());
 
     const response = await request(app).delete(recordPath);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ message: "Item do pedido removido com sucesso." });
-    expect(OrderItems.remove).toHaveBeenCalledExactlyOnceWith(id);
+    expect(OrderItemsRepository.remove).toHaveBeenCalledWith(ID);
   });
 
-  it("deve retornar status 409 quando uma chave estrangeira impedir a remoção", async () => {
-    const error = Object.assign(new Error("Violação de chave estrangeira"), { code: "23503" });
-    vi.mocked(OrderItems.remove).mockRejectedValueOnce(error);
+  it("deve retornar status 404 ao remover um item do pedido que não existe", async () => {
+    vi.mocked(OrderItemsRepository.remove).mockRejectedValueOnce(new NotFoundError("Item do pedido não encontrado."));
 
     const response = await request(app).delete(recordPath);
 
-    expect(response.status).toBe(409);
-    expect(response.body).toEqual({
-      message: "Não é possível remover este item do pedido, pois ele está vinculado a um pedido.",
-    });
-    expect(OrderItems.remove).toHaveBeenCalledExactlyOnceWith(id);
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ message: "Item do pedido não encontrado." });
+  });
+
+  // Nenhuma tabela referencia order_items, então a remoção não trata o erro 23503:
+  // se ele ocorrer, é uma falha inesperada e vira 500.
+  it("deve retornar status 500 quando a remoção falhar por chave estrangeira", async () => {
+    vi.mocked(OrderItemsRepository.remove).mockRejectedValueOnce({ code: "23503", message: "foreign key" });
+
+    const response = await request(app).delete(recordPath);
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ message: "Erro ao remover item do pedido." });
+    expect(OrderItemsRepository.remove).toHaveBeenCalledWith(ID);
   });
 
   it.each([
@@ -121,77 +237,77 @@ describe("OrderItems - Testes de Integração", () => {
       operation: "listagem",
       method: "findAll",
       send: () => request(app).get(basePath),
-      args: [],
       message: "Erro ao buscar itens do pedido.",
+    },
+    {
+      operation: "busca por ID",
+      method: "findById",
+      send: () => request(app).get(recordPath),
+      message: "Erro ao buscar item do pedido.",
     },
     {
       operation: "criação",
       method: "create",
       send: () => request(app).post(basePath).send(newRecord),
-      args: [newRecord],
       message: "Erro ao criar item do pedido.",
     },
     {
       operation: "atualização",
       method: "update",
-      send: () => request(app).put(recordPath).send(changes),
-      args: [id, changes],
+      send: () => {
+        vi.mocked(OrderItemsRepository.findById).mockResolvedValueOnce(orderItem());
+        return request(app).put(recordPath).send(changes);
+      },
       message: "Erro ao atualizar item do pedido.",
     },
     {
       operation: "remoção",
       method: "remove",
       send: () => request(app).delete(recordPath),
-      args: [id],
       message: "Erro ao remover item do pedido.",
     },
-  ] as const)("deve retornar status 500 quando a $operation falhar", async ({ method, send, args, message }) => {
-    vi.mocked(OrderItems[method]).mockRejectedValueOnce(new Error("Falha no banco"));
+  ] as const)("deve retornar status 500 quando a $operation falhar", async ({ method, send, message }) => {
+    vi.mocked(OrderItemsRepository[method]).mockRejectedValueOnce(new Error("Falha simulada no banco"));
 
     const response = await send();
 
     expect(response.status).toBe(500);
     expect(response.body).toEqual({ message });
-    expect(OrderItems[method]).toHaveBeenCalledExactlyOnceWith(...args);
+    expect(OrderItemsRepository[method]).toHaveBeenCalledOnce();
   });
 
-  describe.each([
-    {
-      label: "pedido",
-      method: "findByOrder",
-      path: `${basePath}/order/order-1`,
-      id: "order-1",
-      errorMessage: "Erro ao buscar itens do pedido.",
-    },
-  ] as const)("Filtro por $label", ({ method, path, id, errorMessage }) => {
-    it("deve retornar status 200 e listar os registros do relacionamento", async () => {
-      vi.mocked(OrderItems[method]).mockResolvedValueOnce([record]);
+  describe("Filtro por pedido", () => {
+    const path = `${basePath}/order/${ORDER_ID}`;
+
+    it("deve retornar status 200 e listar os itens do pedido", async () => {
+      vi.mocked(OrderItemsRepository.findByOrder).mockResolvedValueOnce([orderItem()]);
 
       const response = await request(app).get(path);
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual([record]);
-      expect(OrderItems[method]).toHaveBeenCalledExactlyOnceWith(id);
+      expect(OrderItemsRepository.findByOrder).toHaveBeenCalledWith(ORDER_ID);
+      expect(OrderItemsRepository.findById).not.toHaveBeenCalled();
     });
 
     it("deve retornar status 200 e uma lista vazia se não houver resultados", async () => {
-      vi.mocked(OrderItems[method]).mockResolvedValueOnce([]);
+      vi.mocked(OrderItemsRepository.findByOrder).mockResolvedValueOnce([]);
 
       const response = await request(app).get(path);
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual([]);
-      expect(OrderItems[method]).toHaveBeenCalledExactlyOnceWith(id);
+      expect(OrderItemsRepository.findByOrder).toHaveBeenCalledWith(ORDER_ID);
     });
 
-    it("deve retornar status 500 quando a consulta por relacionamento falhar", async () => {
-      vi.mocked(OrderItems[method]).mockRejectedValueOnce(new Error("Falha na consulta"));
+    it("deve retornar status 500 quando a consulta por pedido falhar", async () => {
+      vi.mocked(OrderItemsRepository.findByOrder).mockRejectedValueOnce(new Error("Falha simulada no banco"));
 
       const response = await request(app).get(path);
 
       expect(response.status).toBe(500);
-      expect(response.body).toEqual({ message: errorMessage });
-      expect(OrderItems[method]).toHaveBeenCalledExactlyOnceWith(id);
+      expect(response.body).toEqual({ message: "Erro ao buscar itens do pedido." });
+      expect(OrderItemsRepository.findByOrder).toHaveBeenCalledWith(ORDER_ID);
     });
   });
 });

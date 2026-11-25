@@ -1,92 +1,141 @@
 import type { Request, Response } from "express";
-import Games from "../models/Games.js";
-import { respondToError } from "../http/errors.js";
-import { validateBody, validateId, writeFields } from "../http/validation.js";
+import GamesRepository from "../repository/GamesRepository.js";
+import { Game } from "../models/Games.js";
+import { applyActive, sendError } from "./helpers.js";
 
-const writeErrors = {
-    validateInput: true,
-    foreignKey: "O gênero informado não existe.",
+const GENRE_NOT_FOUND = {
+    status: 400,
+    message: "O gênero informado não existe."
 } as const;
 
-async function getAll(_req: Request, res: Response) {
+async function getAll(req: Request, res: Response) {
     try {
-        const records = await Games.findAll();
-        return res.status(200).json(records);
+        const games = await GamesRepository.findAll();
+
+        res.status(200).json(games);
     } catch (error) {
-        return respondToError(res, error, "Erro ao buscar jogos.");
+        sendError(res, error, "Erro ao buscar jogos.");
     }
 }
 
 async function getById(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-    if (!validateId(res, id, "do jogo")) return;
+
+    if (!id) {
+        return res.status(400).json({
+            message: "ID do Jogo não informado."
+        });
+    }
 
     try {
-        const record = await Games.findById(id);
-        if (record === null) {
-            return res.status(404).json({ message: "Jogo não encontrado." });
-        }
+        const game = await GamesRepository.findById(id);
 
-        return res.status(200).json(record);
+        res.status(200).json(game);
     } catch (error) {
-        return respondToError(res, error, "Erro ao buscar jogo.");
+        sendError(res, error, "Erro ao buscar jogo.");
     }
 }
 
 async function getByGenre(req: Request<{ genreId: string }>, res: Response) {
     const { genreId } = req.params;
-    if (!validateId(res, genreId, "do gênero")) return;
+
+    if (!genreId) {
+        return res.status(400).json({
+            message: "ID do Gênero não informado."
+        });
+    }
 
     try {
-        const records = await Games.findByGenre(genreId);
-        return res.status(200).json(records);
+        const games = await GamesRepository.findByGenre(genreId);
+
+        res.status(200).json(games);
     } catch (error) {
-        return respondToError(res, error, "Erro ao buscar jogos do gênero.");
+        sendError(res, error, "Erro ao buscar jogos do gênero.");
     }
 }
 
 async function create(req: Request, res: Response) {
-    if (!validateBody(res, req.body, writeFields.games, { create: true })) return;
+    const body = req.body ?? {};
 
     try {
-        const record = await Games.create(req.body);
-        return res.status(201).json(record);
+        const game = new Game(body);
+        applyActive(game, body.active);
+
+        const createdGame = await GamesRepository.create(game);
+
+        res.status(201).json(createdGame);
     } catch (error) {
-        return respondToError(res, error, "Erro ao criar jogo.", writeErrors);
+        sendError(res, error, "Erro ao criar jogo.", GENRE_NOT_FOUND);
     }
 }
 
 async function update(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-    if (!validateId(res, id, "do jogo")) return;
-    if (!validateBody(res, req.body, writeFields.games, { create: false })) return;
+    const body = req.body ?? {};
+
+    if (!id) {
+        return res.status(400).json({
+            message: "ID do Jogo não informado."
+        });
+    }
 
     try {
-        const record = await Games.update(id, req.body);
-        if (record === null) {
-            return res.status(404).json({ message: "Jogo não encontrado." });
+        const game = await GamesRepository.findById(id);
+
+        if (body.genre_id !== undefined) {
+            game.changeGenre(body.genre_id);
+        }
+        if (body.title !== undefined) {
+            game.rename(body.title);
+        }
+        if (body.description !== undefined) {
+            game.changeDescription(body.description);
+        }
+        if (body.price !== undefined) {
+            game.changePrice(body.price);
+        }
+        if (body.stock_quantity !== undefined) {
+            game.changeStockQuantity(body.stock_quantity);
+        }
+        if (body.release_date !== undefined) {
+            game.changeReleaseDate(body.release_date);
+        }
+        if (body.developer !== undefined) {
+            game.changeDeveloper(body.developer);
+        }
+        if (body.image !== undefined) {
+            game.changeImage(body.image);
         }
 
-        return res.status(200).json(record);
+        applyActive(game, body.active);
+
+        const updatedGame = await GamesRepository.update(game);
+
+        res.status(200).json(updatedGame);
     } catch (error) {
-        return respondToError(res, error, "Erro ao atualizar jogo.", writeErrors);
+        sendError(res, error, "Erro ao atualizar jogo.", GENRE_NOT_FOUND);
     }
 }
 
 async function remove(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-    if (!validateId(res, id, "do jogo")) return;
+
+    if (!id) {
+        return res.status(400).json({
+            message: "ID do Jogo não informado."
+        });
+    }
 
     try {
-        const deleted = await Games.remove(id);
-        if (deleted === null) {
-            return res.status(404).json({ message: "Jogo não encontrado para remoção." });
-        }
+        await GamesRepository.remove(id);
 
-        return res.status(200).json({ message: "Jogo removido com sucesso." });
+        res.status(200).json({
+            message: "Jogo removido com sucesso.",
+        });
     } catch (error) {
-        return respondToError(res, error, "Erro ao remover jogo.", {
-            foreignKey: "Não é possível remover este jogo, pois ele está vinculado a um pedido.",
+        sendError(res, error, "Erro ao remover jogo.", {
+            status: 409,
+            message: "Não é possível remover este jogo, pois ele está vinculado a um pedido."
         });
     }
 }
@@ -97,5 +146,5 @@ export default {
     getByGenre,
     create,
     update,
-    remove,
-};
+    remove
+}

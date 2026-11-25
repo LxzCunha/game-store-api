@@ -111,8 +111,10 @@ game-store-api/
 ├── src/
 │   ├── config/
 │   │   └── supabase.ts     # conexão com o Supabase usando as variáveis de ambiente
-│   ├── controllers/        # recebem as requisições, validam os dados e definem as respostas HTTP
-│   ├── models/             # realizam as consultas e alterações no banco (Supabase)
+│   ├── controllers/        # recebem as requisições, montam as entidades e definem as respostas HTTP
+│   ├── errors/             # erros da aplicação (ValidationError → 400, NotFoundError → 404)
+│   ├── models/             # entidades (classes) com as regras de validação de cada dado
+│   ├── repository/         # realizam as consultas e alterações no banco (Supabase)
 │   ├── routes/             # associam cada método HTTP e rota ao controller correspondente
 │   ├── app.ts              # configuração do Express e registro das rotas
 │   └── server.ts           # inicialização do servidor
@@ -124,7 +126,7 @@ game-store-api/
 └── README.md
 ```
 
-**Fluxo de uma requisição:** `routes` → `controllers` → `models` → Supabase → resposta em JSON.
+**Fluxo de uma requisição:** `routes` → `controllers` → `repository` → Supabase → resposta em JSON. Os `models` são as entidades que circulam entre essas camadas: o controller cria ou altera a entidade (que valida os dados) e o repository a grava no banco.
 
 ---
 

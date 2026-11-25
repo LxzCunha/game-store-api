@@ -1,293 +1,432 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
 }));
 
 vi.mock("../config/supabase.js", () => ({
-  default: { from: mocks.from },
-}));
-
-vi.mock("../models/Person.js", () => ({
   default: {
-    create: vi.fn(),
-    update: vi.fn(),
-    remove: vi.fn(),
+    from: mocks.from,
   },
 }));
 
-import Customer from "../models/Customer.js";
-import Person from "../models/Person.js";
+import { Customer, type CustomerData } from "../models/Customer.js";
+import CustomerRepository from "../repository/CustomerRepository.js";
+import { NotFoundError } from "../errors/NotFoundError.js";
+import { ValidationError } from "../errors/ValidationError.js";
+import { ConflictError } from "../errors/ConflictError.js";
 
-const id = "customer-1";
-const personId = "person-1";
+const ID = "11111111-1111-4111-8111-111111111111";
+const PERSON_ID = "22222222-2222-4222-8222-222222222222";
+const SELECT = "id, person_id, birth_date, person:people(name, email, phone, address)";
+const CONFLICT = "Já existe um cadastro com o e-mail informado.";
+const DATE_MESSAGE = "A data de nascimento deve estar no formato AAAA-MM-DD.";
+
 const personData = {
   name: "Maria Souza",
-  email: "customer@example.com",
+  email: "maria@example.com",
   phone: "(11) 98888-7777",
   address: "Rua das Flores, 100",
 };
-const person = { id: personId, ...personData, role: "customer" };
-const record = { id, person_id: personId, birth_date: "2000-04-15" };
-const joinedRecord = { ...record, person };
-const expected = { ...person, ...record };
-const joinedColumns = "id, person_id, birth_date, person:people(*)";
-const lookupOperations = [
-  { operation: "findById", run: () => Customer.findById(id) },
-  { operation: "update", run: () => Customer.update(id, {}) },
-  { operation: "remove", run: () => Customer.remove(id) },
-];
+const data = { ...personData, birth_date: "2000-04-15" };
+// Linha como o Supabase devolve: dados da pessoa embutidos em "person".
+const row = { id: ID, person_id: PERSON_ID, birth_date: data.birth_date, person: personData };
+// Linha gravada em "people".
+const personRow = { ...personData, role: "customer" };
+// Formato plano exposto por toJSON.
+const record = { id: ID, person_id: PERSON_ID, ...personData, role: "customer", birth_date: data.birth_date };
+const restored = () => Customer.restore({ id: ID, person_id: PERSON_ID, ...data });
 
-function mockLookup(data: typeof joinedRecord | null = joinedRecord, error: Error | null = null) {
-  const single = vi.fn().mockResolvedValue({ data, error });
-  const eq = vi.fn().mockReturnValue({ single });
-  const select = vi.fn().mockReturnValue({ eq });
-
+// Cada helper enfileira a próxima chamada a supabase.from(), na ordem em que o repositório a faz.
+function mockFindAll(data: unknown, error: unknown = null) {
+  const overrideTypes = vi.fn().mockResolvedValue({ data, error });
+  const select = vi.fn().mockReturnValue({ overrideTypes });
   mocks.from.mockReturnValueOnce({ select });
 
-  return { select, eq, single };
+  return { select };
 }
 
-describe("Customer - Testes Unitários", () => {
+function mockFindById(data: unknown = row, error: unknown = null) {
+  const overrideTypes = vi.fn().mockResolvedValue({ data, error });
+  const maybeSingle = vi.fn().mockReturnValue({ overrideTypes });
+  const eq = vi.fn().mockReturnValue({ maybeSingle });
+  const select = vi.fn().mockReturnValue({ eq });
+  mocks.from.mockReturnValueOnce({ select });
+
+  return { select, eq, maybeSingle };
+}
+
+function mockInsert(data: unknown, error: unknown = null) {
+  const single = vi.fn().mockResolvedValue({ data, error });
+  const select = vi.fn().mockReturnValue({ single });
+  const insert = vi.fn().mockReturnValue({ select });
+  mocks.from.mockReturnValueOnce({ insert });
+
+  return { insert, select, single };
+}
+
+function mockUpdate(error: unknown = null) {
+  const eq = vi.fn().mockResolvedValue({ error });
+  const update = vi.fn().mockReturnValue({ eq });
+  mocks.from.mockReturnValueOnce({ update });
+
+  return { update, eq };
+}
+
+function mockDelete(error: unknown = null) {
+  const eq = vi.fn().mockResolvedValue({ error });
+  const deleteMock = vi.fn().mockReturnValue({ eq });
+  mocks.from.mockReturnValueOnce({ delete: deleteMock });
+
+  return { deleteMock, eq };
+}
+
+describe("Customer - Entidade", () => {
+  it("deve criar um cliente sem IDs, com o papel customer e com nome e e-mail sem espaços nas pontas", () => {
+    const customer = new Customer({ ...data, name: "  Maria Souza  ", email: " maria@example.com " });
+
+    expect(customer.getId()).toBeUndefined();
+    expect(customer.getPersonId()).toBeUndefined();
+    expect(customer.getRole()).toBe("customer");
+    expect(customer.getName()).toBe("Maria Souza");
+    expect(customer.getEmail()).toBe("maria@example.com");
+    expect(customer.getPhone()).toBe(data.phone);
+    expect(customer.getAddress()).toBe(data.address);
+    expect(customer.getBirthDate()).toBe(data.birth_date);
+  });
+
+  it("deve usar telefone, endereço e data de nascimento nulos quando não forem informados", () => {
+    const customer = new Customer({ name: "Maria Souza", email: "maria@example.com" });
+
+    expect(customer.getPhone()).toBeNull();
+    expect(customer.getAddress()).toBeNull();
+    expect(customer.getBirthDate()).toBeNull();
+  });
+
+  it("deve aceitar telefone, endereço e data de nascimento nulos", () => {
+    const customer = new Customer({ ...data, phone: null, address: null, birth_date: null });
+
+    expect(customer.getPhone()).toBeNull();
+    expect(customer.getAddress()).toBeNull();
+    expect(customer.getBirthDate()).toBeNull();
+  });
+
+  it.each([undefined, "", "   ", 123])("deve rejeitar o nome %j", (name) => {
+    expect(() => new Customer({ ...data, name: name as string })).toThrow(
+      new ValidationError("O nome é obrigatório.")
+    );
+  });
+
+  it.each([undefined, "", "maria", "maria@", "maria@example", "maria @example.com", 123])(
+    "deve rejeitar o e-mail %j",
+    (email) => {
+      expect(() => new Customer({ ...data, email: email as string })).toThrow(
+        new ValidationError("Informe um e-mail válido.")
+      );
+    }
+  );
+
+  it("deve rejeitar um telefone que não seja texto", () => {
+    expect(() => new Customer({ ...data, phone: 11988887777 as unknown as string })).toThrow(
+      new ValidationError("O telefone deve ser um texto.")
+    );
+  });
+
+  it("deve rejeitar um endereço que não seja texto", () => {
+    expect(() => new Customer({ ...data, address: 100 as unknown as string })).toThrow(
+      new ValidationError("O endereço deve ser um texto.")
+    );
+  });
+
+  it.each(["15/04/2000", "2000-4-15", "2000-02-30", "2000-13-01", "", 20000415])(
+    "deve rejeitar a data de nascimento %j",
+    (birthDate) => {
+      expect(() => new Customer({ ...data, birth_date: birthDate as string })).toThrow(
+        new ValidationError(DATE_MESSAGE)
+      );
+    }
+  );
+
+  it("deve ter sempre o papel customer, ignorando um papel informado nos dados", () => {
+    const customer = new Customer({ ...data, role: "seller" } as CustomerData);
+
+    expect(customer.getRole()).toBe("customer");
+    expect(customer.toJSON().role).toBe("customer");
+  });
+
+  it("deve alterar os dados validando e ajustando os novos valores", () => {
+    const customer = new Customer(data);
+
+    customer.rename("  Maria Souza Silva ");
+    customer.changeEmail(" maria.silva@example.com ");
+    customer.changePhone(null);
+    customer.changeAddress(null);
+    customer.changeBirthDate(null);
+
+    expect(customer.getName()).toBe("Maria Souza Silva");
+    expect(customer.getEmail()).toBe("maria.silva@example.com");
+    expect(customer.getPhone()).toBeNull();
+    expect(customer.getAddress()).toBeNull();
+    expect(customer.getBirthDate()).toBeNull();
+  });
+
+  it("deve manter os dados anteriores quando uma alteração for rejeitada", () => {
+    const customer = restored();
+
+    expect(() => customer.rename("")).toThrow(ValidationError);
+    expect(() => customer.changeEmail("maria")).toThrow(ValidationError);
+    expect(() => customer.changeBirthDate("2000-02-30")).toThrow(ValidationError);
+
+    expect(customer.toJSON()).toEqual(record);
+  });
+
+  it("deve restaurar um cliente do banco com o ID e o ID da pessoa, expondo um JSON plano", () => {
+    const customer = restored();
+
+    expect(customer.getId()).toBe(ID);
+    expect(customer.getPersonId()).toBe(PERSON_ID);
+    expect(customer.toJSON()).toEqual(record);
+  });
+});
+
+describe("CustomerRepository - Testes Unitários", () => {
   beforeEach(() => {
+    // resetAllMocks também descarta os retornos enfileirados com mockReturnValueOnce.
     vi.resetAllMocks();
   });
 
-  it("deve listar os clientes com os dados de pessoa em um único objeto", async () => {
-    const select = vi.fn().mockResolvedValue({ data: [joinedRecord], error: null });
-    mocks.from.mockReturnValueOnce({ select });
+  it("deve listar os clientes reunindo os dados da pessoa em um único objeto", async () => {
+    const { select } = mockFindAll([row]);
 
-    await expect(Customer.findAll()).resolves.toEqual([expected]);
+    const result = await CustomerRepository.findAll();
 
-    expect(mocks.from).toHaveBeenCalledWith("customers");
-    expect(select).toHaveBeenCalledWith(joinedColumns);
+    expect(mocks.from).toHaveBeenCalledExactlyOnceWith("customers");
+    expect(select).toHaveBeenCalledWith(SELECT);
+    expect(result[0]).toBeInstanceOf(Customer);
+    expect(result.map((customer) => customer.toJSON())).toEqual([record]);
   });
 
   it("deve retornar uma lista vazia quando não houver clientes", async () => {
-    const select = vi.fn().mockResolvedValue({ data: [], error: null });
-    mocks.from.mockReturnValueOnce({ select });
+    mockFindAll([]);
 
-    await expect(Customer.findAll()).resolves.toEqual([]);
+    await expect(CustomerRepository.findAll()).resolves.toEqual([]);
   });
 
   it("deve propagar o erro ao listar os clientes", async () => {
-    const error = new Error("Falha ao listar clientes");
-    const select = vi.fn().mockResolvedValue({ data: null, error });
-    mocks.from.mockReturnValueOnce({ select });
+    const error = { code: "XX000", message: "Falha ao listar clientes" };
+    mockFindAll(null, error);
 
-    await expect(Customer.findAll()).rejects.toBe(error);
+    await expect(CustomerRepository.findAll()).rejects.toBe(error);
   });
 
   it("deve buscar o cliente pelo ID e reunir os dados da pessoa", async () => {
-    const { select, eq, single } = mockLookup();
+    const { select, eq, maybeSingle } = mockFindById();
 
-    await expect(Customer.findById(id)).resolves.toEqual(expected);
+    const result = await CustomerRepository.findById(ID);
 
-    expect(mocks.from).toHaveBeenCalledWith("customers");
-    expect(select).toHaveBeenCalledWith(joinedColumns);
-    expect(eq).toHaveBeenCalledWith("id", id);
-    expect(single).toHaveBeenCalledOnce();
-  });
-
-  it.each(lookupOperations)(
-    "deve retornar null em $operation quando a consulta não trouxer um registro nem erro",
-    async ({ run }) => {
-      mockLookup(null);
-
-      await expect(run()).resolves.toBeNull();
-
-      expect(mocks.from).toHaveBeenCalledOnce();
-      expect(Person.update).not.toHaveBeenCalled();
-      expect(Person.remove).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(lookupOperations)(
-    "deve propagar o erro da busca inicial em $operation",
-    async ({ run }) => {
-      const error = Object.assign(new Error("Nenhum registro encontrado"), { code: "PGRST116" });
-      mockLookup(null, error);
-
-      await expect(run()).rejects.toBe(error);
-
-      expect(mocks.from).toHaveBeenCalledOnce();
-      expect(Person.update).not.toHaveBeenCalled();
-      expect(Person.remove).not.toHaveBeenCalled();
-    },
-  );
-
-  it("deve cadastrar a pessoa com o papel de cliente e vincular seu ID", async () => {
-    vi.mocked(Person.create).mockResolvedValueOnce(person);
-    const single = vi.fn().mockResolvedValue({ data: record, error: null });
-    const select = vi.fn().mockReturnValue({ single });
-    const insert = vi.fn().mockReturnValue({ select });
-    mocks.from.mockReturnValueOnce({ insert });
-
-    await expect(Customer.create({
-      ...personData,
-      birth_date: record.birth_date,
-    })).resolves.toEqual(expected);
-
-    expect(Person.create).toHaveBeenCalledExactlyOnceWith({ ...personData, role: "customer" });
     expect(mocks.from).toHaveBeenCalledExactlyOnceWith("customers");
-    expect(insert).toHaveBeenCalledExactlyOnceWith({
-      person_id: personId,
-      birth_date: record.birth_date,
-    });
-    expect(select).toHaveBeenCalledWith("id, person_id, birth_date");
-    expect(single).toHaveBeenCalledOnce();
-    expect(Person.remove).not.toHaveBeenCalled();
+    expect(select).toHaveBeenCalledWith(SELECT);
+    expect(eq).toHaveBeenCalledWith("id", ID);
+    expect(maybeSingle).toHaveBeenCalledOnce();
+    expect(result).toBeInstanceOf(Customer);
+    expect(result.toJSON()).toEqual(record);
   });
 
-  it("deve interromper o cadastro se a criação da pessoa falhar", async () => {
-    const error = new Error("Falha ao cadastrar pessoa");
-    vi.mocked(Person.create).mockRejectedValueOnce(error);
+  // findById e remove começam pela mesma busca; nenhuma outra tabela pode ser tocada se ela falhar.
+  const lookups = [
+    { operation: "findById", run: (id: string) => CustomerRepository.findById(id) },
+    { operation: "remove", run: (id: string) => CustomerRepository.remove(id) },
+  ];
 
-    await expect(Customer.create({
-      ...personData,
-      birth_date: record.birth_date,
-    })).rejects.toBe(error);
+  it.each(lookups)("deve lançar NotFoundError em $operation quando o cliente não existir", async ({ run }) => {
+    mockFindById(null);
 
-    expect(mocks.from).not.toHaveBeenCalled();
-    expect(Person.remove).not.toHaveBeenCalled();
-  });
-
-  it("deve remover a pessoa criada quando o cadastro de cliente falhar", async () => {
-    const error = new Error("Falha ao cadastrar cliente");
-    vi.mocked(Person.create).mockResolvedValueOnce(person);
-    vi.mocked(Person.remove).mockResolvedValueOnce(person);
-    const single = vi.fn().mockResolvedValue({ data: null, error });
-    const select = vi.fn().mockReturnValue({ single });
-    const insert = vi.fn().mockReturnValue({ select });
-    mocks.from.mockReturnValueOnce({ insert });
-
-    await expect(Customer.create({
-      ...personData,
-      birth_date: record.birth_date,
-    })).rejects.toBe(error);
-
-    expect(Person.remove).toHaveBeenCalledExactlyOnceWith(personId);
-    expect(single).toHaveBeenCalledBefore(vi.mocked(Person.remove));
-  });
-
-  it("deve atualizar a data e os dados pessoais usando seus respectivos IDs", async () => {
-    mockLookup();
-    const name = "Maria Souza Silva";
-    const birth_date = "2000-04-16";
-    const eq = vi.fn().mockResolvedValue({ error: null });
-    const update = vi.fn().mockReturnValue({ eq });
-    mocks.from.mockReturnValueOnce({ update });
-    vi.mocked(Person.update).mockResolvedValueOnce({ ...person, name });
-    mockLookup({ ...joinedRecord, birth_date, person: { ...person, name } });
-
-    await expect(Customer.update(id, { birth_date, name, role: "seller" }))
-      .resolves.toEqual({ ...expected, birth_date, name });
-
-    expect(mocks.from.mock.calls).toEqual([["customers"], ["customers"], ["customers"]]);
-    expect(update).toHaveBeenCalledExactlyOnceWith({ birth_date });
-    expect(eq).toHaveBeenCalledExactlyOnceWith("id", id);
-    expect(Person.update).toHaveBeenCalledExactlyOnceWith(personId, { name });
-  });
-
-  it("deve atualizar apenas a data quando o payload não tiver dados pessoais", async () => {
-    mockLookup();
-    const birth_date = "2000-04-16";
-    const eq = vi.fn().mockResolvedValue({ error: null });
-    const update = vi.fn().mockReturnValue({ eq });
-    mocks.from.mockReturnValueOnce({ update });
-    mockLookup({ ...joinedRecord, birth_date });
-
-    await expect(Customer.update(id, { birth_date }))
-      .resolves.toEqual({ ...expected, birth_date });
-
-    expect(update).toHaveBeenCalledExactlyOnceWith({ birth_date });
-    expect(eq).toHaveBeenCalledExactlyOnceWith("id", id);
-    expect(Person.update).not.toHaveBeenCalled();
-  });
-
-  it("deve atualizar apenas a pessoa quando o payload não tiver a data", async () => {
-    mockLookup();
-    const phone = "(11) 97777-6666";
-    vi.mocked(Person.update).mockResolvedValueOnce({ ...person, phone });
-    mockLookup({ ...joinedRecord, person: { ...person, phone } });
-
-    await expect(Customer.update(id, { phone })).resolves.toEqual({ ...expected, phone });
-
-    expect(Person.update).toHaveBeenCalledExactlyOnceWith(personId, { phone });
-    expect(mocks.from).toHaveBeenCalledTimes(2);
-  });
-
-  it("deve manter o papel da pessoa quando apenas role for enviado", async () => {
-    mockLookup();
-    mockLookup();
-
-    await expect(Customer.update(id, { role: "seller" })).resolves.toEqual(expected);
-
-    expect(Person.update).not.toHaveBeenCalled();
-    expect(mocks.from).toHaveBeenCalledTimes(2);
-  });
-
-  it("deve interromper a atualização dos dados pessoais se a alteração da data falhar", async () => {
-    mockLookup();
-    const error = new Error("Falha ao atualizar birth_date");
-    const eq = vi.fn().mockResolvedValue({ error });
-    const update = vi.fn().mockReturnValue({ eq });
-    mocks.from.mockReturnValueOnce({ update });
-
-    await expect(Customer.update(id, { birth_date: "2000-04-16", name: "Maria Souza Silva" }))
-      .rejects.toBe(error);
-
-    expect(Person.update).not.toHaveBeenCalled();
-    expect(mocks.from).toHaveBeenCalledTimes(2);
-  });
-
-  it("deve propagar o erro da atualização da pessoa", async () => {
-    mockLookup();
-    const error = new Error("Falha ao atualizar pessoa");
-    vi.mocked(Person.update).mockRejectedValueOnce(error);
-
-    await expect(Customer.update(id, { name: "Maria Souza Silva" })).rejects.toBe(error);
-
+    await expect(run(ID)).rejects.toThrow(new NotFoundError("Cliente não encontrado."));
     expect(mocks.from).toHaveBeenCalledOnce();
   });
 
-  it("deve excluir o cliente antes da pessoa e retornar o registro removido", async () => {
-    mockLookup();
-    const eq = vi.fn().mockResolvedValue({ error: null });
-    const deleteMock = vi.fn().mockReturnValue({ eq });
-    mocks.from.mockReturnValueOnce({ delete: deleteMock });
-    vi.mocked(Person.remove).mockResolvedValueOnce(person);
+  it.each(lookups)(
+    "deve lançar NotFoundError em $operation quando o ID não for um UUID (erro 22P02)",
+    async ({ run }) => {
+      mockFindById(null, { code: "22P02", message: "invalid input syntax for type uuid" });
 
-    await expect(Customer.remove(id)).resolves.toEqual(expected);
+      await expect(run("abc")).rejects.toThrow(new NotFoundError("Cliente não encontrado."));
+      expect(mocks.from).toHaveBeenCalledOnce();
+    }
+  );
 
-    expect(mocks.from.mock.calls).toEqual([["customers"], ["customers"]]);
-    expect(deleteMock).toHaveBeenCalledOnce();
-    expect(eq).toHaveBeenCalledExactlyOnceWith("id", id);
-    expect(Person.remove).toHaveBeenCalledExactlyOnceWith(personId);
-    expect(eq).toHaveBeenCalledBefore(vi.mocked(Person.remove));
+  it.each(lookups)("deve propagar os demais erros da busca inicial em $operation", async ({ run }) => {
+    const error = { code: "XX000", message: "Falha no banco" };
+    mockFindById(null, error);
+
+    await expect(run(ID)).rejects.toBe(error);
+    expect(mocks.from).toHaveBeenCalledOnce();
   });
 
-  it("deve preservar a pessoa se houver um pedido vinculado ao cliente", async () => {
-    mockLookup();
-    const error = Object.assign(new Error("Violação de chave estrangeira"), { code: "23503" });
-    const eq = vi.fn().mockResolvedValue({ error });
-    const deleteMock = vi.fn().mockReturnValue({ eq });
-    mocks.from.mockReturnValueOnce({ delete: deleteMock });
+  it("deve cadastrar a pessoa com o papel customer, vincular seu ID ao cliente e reler o registro", async () => {
+    const people = mockInsert({ id: PERSON_ID });
+    const customers = mockInsert({ id: ID });
+    const lookup = mockFindById();
 
-    await expect(Customer.remove(id)).rejects.toBe(error);
+    const result = await CustomerRepository.create(new Customer(data));
 
-    expect(Person.remove).not.toHaveBeenCalled();
+    expect(mocks.from.mock.calls).toEqual([["people"], ["customers"], ["customers"]]);
+    expect(people.insert).toHaveBeenCalledExactlyOnceWith(personRow);
+    expect(people.select).toHaveBeenCalledWith("id");
+    expect(customers.insert).toHaveBeenCalledExactlyOnceWith({ person_id: PERSON_ID, birth_date: data.birth_date });
+    expect(customers.select).toHaveBeenCalledWith("id");
+    expect(lookup.eq).toHaveBeenCalledWith("id", ID);
+    expect(result).toBeInstanceOf(Customer);
+    expect(result.toJSON()).toEqual(record);
+  });
+
+  it("deve interromper o cadastro se a criação da pessoa falhar", async () => {
+    const error = { code: "XX000", message: "Falha ao cadastrar pessoa" };
+    mockInsert(null, error);
+
+    await expect(CustomerRepository.create(new Customer(data))).rejects.toBe(error);
+    expect(mocks.from.mock.calls).toEqual([["people"]]);
+  });
+
+  it("deve lançar ConflictError ao cadastrar um e-mail já existente (erro 23505)", async () => {
+    mockInsert(null, { code: "23505", message: "duplicate key value violates unique constraint" });
+
+    await expect(CustomerRepository.create(new Customer(data))).rejects.toThrow(new ConflictError(CONFLICT));
+    expect(mocks.from.mock.calls).toEqual([["people"]]);
+  });
+
+  it("deve remover a pessoa criada e propagar o erro quando o cadastro do cliente falhar", async () => {
+    const error = { code: "XX000", message: "Falha ao cadastrar cliente" };
+    mockInsert({ id: PERSON_ID });
+    const customers = mockInsert(null, error);
+    const rollback = mockDelete();
+
+    await expect(CustomerRepository.create(new Customer(data))).rejects.toBe(error);
+
+    expect(mocks.from.mock.calls).toEqual([["people"], ["customers"], ["people"]]);
+    expect(rollback.deleteMock).toHaveBeenCalledOnce();
+    expect(rollback.eq).toHaveBeenCalledExactlyOnceWith("id", PERSON_ID);
+    expect(customers.single).toHaveBeenCalledBefore(rollback.deleteMock);
+  });
+
+  it("deve atualizar a pessoa (mantendo o papel customer) e a data usando seus respectivos IDs", async () => {
+    const people = mockUpdate();
+    const customers = mockUpdate();
+    mockFindById({ ...row, birth_date: "2000-04-16", person: { ...personData, name: "Maria Souza Silva" } });
+
+    const customer = restored();
+    customer.rename("Maria Souza Silva");
+    customer.changeBirthDate("2000-04-16");
+
+    const result = await CustomerRepository.update(customer);
+
+    expect(mocks.from.mock.calls).toEqual([["people"], ["customers"], ["customers"]]);
+    expect(people.update).toHaveBeenCalledExactlyOnceWith({ ...personRow, name: "Maria Souza Silva" });
+    expect(people.eq).toHaveBeenCalledExactlyOnceWith("id", PERSON_ID);
+    expect(customers.update).toHaveBeenCalledExactlyOnceWith({ birth_date: "2000-04-16" });
+    expect(customers.eq).toHaveBeenCalledExactlyOnceWith("id", ID);
+    expect(people.eq).toHaveBeenCalledBefore(customers.update);
+    expect(result.toJSON()).toEqual({ ...record, name: "Maria Souza Silva", birth_date: "2000-04-16" });
+  });
+
+  it("deve regravar os dados pessoais atuais quando só a data mudar", async () => {
+    const people = mockUpdate();
+    const customers = mockUpdate();
+    mockFindById({ ...row, birth_date: "2000-04-16" });
+
+    const customer = restored();
+    customer.changeBirthDate("2000-04-16");
+
+    const result = await CustomerRepository.update(customer);
+
+    expect(people.update).toHaveBeenCalledExactlyOnceWith(personRow);
+    expect(customers.update).toHaveBeenCalledExactlyOnceWith({ birth_date: "2000-04-16" });
+    expect(result.toJSON()).toEqual({ ...record, birth_date: "2000-04-16" });
+  });
+
+  it("deve regravar a data atual quando só os dados pessoais mudarem", async () => {
+    const phone = "(11) 97777-6666";
+    const people = mockUpdate();
+    const customers = mockUpdate();
+    mockFindById({ ...row, person: { ...personData, phone } });
+
+    const customer = restored();
+    customer.changePhone(phone);
+
+    const result = await CustomerRepository.update(customer);
+
+    expect(people.update).toHaveBeenCalledExactlyOnceWith({ ...personRow, phone });
+    expect(customers.update).toHaveBeenCalledExactlyOnceWith({ birth_date: data.birth_date });
+    expect(result.toJSON()).toEqual({ ...record, phone });
+  });
+
+  it("deve interromper a atualização se a gravação da pessoa falhar", async () => {
+    const error = { code: "XX000", message: "Falha ao atualizar pessoa" };
+    mockUpdate(error);
+
+    await expect(CustomerRepository.update(restored())).rejects.toBe(error);
+    expect(mocks.from.mock.calls).toEqual([["people"]]);
+  });
+
+  it("deve lançar ConflictError ao atualizar para um e-mail já existente (erro 23505)", async () => {
+    mockUpdate({ code: "23505", message: "duplicate key value violates unique constraint" });
+
+    const customer = restored();
+    customer.changeEmail("outra@example.com");
+
+    await expect(CustomerRepository.update(customer)).rejects.toThrow(new ConflictError(CONFLICT));
+    expect(mocks.from.mock.calls).toEqual([["people"]]);
+  });
+
+  it("deve propagar o erro e não reler o cliente se a gravação da data falhar", async () => {
+    const error = { code: "XX000", message: "Falha ao atualizar birth_date" };
+    mockUpdate();
+    mockUpdate(error);
+
+    await expect(CustomerRepository.update(restored())).rejects.toBe(error);
+    expect(mocks.from.mock.calls).toEqual([["people"], ["customers"]]);
+  });
+
+  it("deve recusar atualizar um cliente sem ID", async () => {
+    await expect(CustomerRepository.update(new Customer(data))).rejects.toThrow(
+      "Cliente sem ID não pode ser atualizado."
+    );
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it("deve excluir o cliente antes da pessoa e devolver o registro removido", async () => {
+    const lookup = mockFindById();
+    const customers = mockDelete();
+    const people = mockDelete();
+
+    const result = await CustomerRepository.remove(ID);
+
+    expect(mocks.from.mock.calls).toEqual([["customers"], ["customers"], ["people"]]);
+    expect(lookup.eq).toHaveBeenCalledWith("id", ID);
+    expect(customers.deleteMock).toHaveBeenCalledOnce();
+    expect(customers.eq).toHaveBeenCalledExactlyOnceWith("id", ID);
+    expect(people.eq).toHaveBeenCalledExactlyOnceWith("id", PERSON_ID);
+    expect(customers.eq).toHaveBeenCalledBefore(people.deleteMock);
+    expect(result).toBeInstanceOf(Customer);
+    expect(result.toJSON()).toEqual(record);
+  });
+
+  it("deve preservar a pessoa se houver um pedido vinculado ao cliente (erro 23503)", async () => {
+    const foreignKeyError = { code: "23503", message: "violates foreign key constraint" };
+    mockFindById();
+    mockDelete(foreignKeyError);
+
+    await expect(CustomerRepository.remove(ID)).rejects.toBe(foreignKeyError);
+    expect(mocks.from.mock.calls).toEqual([["customers"], ["customers"]]);
   });
 
   it("deve propagar o erro da remoção da pessoa", async () => {
-    mockLookup();
-    const eq = vi.fn().mockResolvedValue({ error: null });
-    mocks.from.mockReturnValueOnce({ delete: vi.fn().mockReturnValue({ eq }) });
-    const error = new Error("Falha ao remover pessoa");
-    vi.mocked(Person.remove).mockRejectedValueOnce(error);
+    const error = { code: "XX000", message: "Falha ao remover pessoa" };
+    mockFindById();
+    mockDelete();
+    const people = mockDelete(error);
 
-    await expect(Customer.remove(id)).rejects.toBe(error);
-
-    expect(Person.remove).toHaveBeenCalledExactlyOnceWith(personId);
+    await expect(CustomerRepository.remove(ID)).rejects.toBe(error);
+    expect(people.eq).toHaveBeenCalledExactlyOnceWith("id", PERSON_ID);
   });
 });

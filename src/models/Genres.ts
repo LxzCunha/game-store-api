@@ -1,89 +1,72 @@
-import supabase from "../config/supabase.js";
+import { ValidationError } from "../errors/ValidationError.js";
 
-async function findAll() {
-    const{data, error} = await supabase
-    .from("genres")
-    .select("*");
+export class Genre {
+    private id: string | undefined;
+    private name: string;
+    private description: string | null;
+    private active: boolean;
 
-    if(error) {
-        throw error;
+    constructor(name: string, description?: string | null) {
+        this.id = undefined;
+        this.name = "";
+        this.description = null;
+        this.active = true;
+
+        this.rename(name);
+
+        if (description !== undefined) {
+            this.changeDescription(description);
+        }
     }
 
-    console.log(data)
-    return data;
-}
+    static restore(id: string, name: string, description: string | null, active: boolean): Genre {
+        const genre = new Genre(name, description);
 
-async function findById(id: string) {
-    const{data, error} = await supabase
-    .from("genres")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+        genre.id = id;
+        genre.active = active;
 
-    if(error){
-        throw error;
+        return genre;
     }
 
-    return data;
-}
-
-async function create(genre:{
-    name: string;
-    description: string;
-    active:boolean;
-}) {
-    const { data, error} = await supabase
-    .from("genres")
-    .insert(genre)
-    .select()
-    .single();
-
-    if(error) {
-        throw error;
+    public getId(): string | undefined {
+        return this.id;
+    }
+    public getName(): string {
+        return this.name;
+    }
+    public getDescription(): string | null {
+        return this.description;
+    }
+    public isActive(): boolean {
+        return this.active;
     }
 
-    return data;
-}
-
-async function update(
-    id: string,
-    genre: {
-    name: string;
-    description: string;
-    active:boolean;
-}) {
-    const { data, error} = await supabase
-    .from("genres")
-    .update(genre)
-    .eq("id", id)
-    .select()
-    .maybeSingle();
-
-    if(error) {
-        throw error;
+    rename(name: string): void {
+        if (typeof name !== "string" || name.trim().length === 0) {
+            throw new ValidationError("O nome do gênero é obrigatório.");
+        }
+        this.name = name.trim();
+    }
+    changeDescription(description: string | null): void {
+        if (description !== null && typeof description !== "string") {
+            throw new ValidationError("A descrição do gênero deve ser um texto.");
+        }
+        this.description = description;
     }
 
-    return data;
-}
-
-async function remove(id: string) {
-    const{data, error} = await supabase
-    .from("genres")
-    .delete()
-    .eq("id", id)
-    .select();
-
-    if(error){
-        throw error;
+    activate(): void {
+        this.active = true;
+    }
+    deactivate(): void {
+        this.active = false;
     }
 
-    return data;
-}
-
-export default {
-    findAll,
-    findById,
-    create,
-    update,
-    remove
+    toJSON() {
+        return {
+            id: this.id,
+            name: this.name,
+            description: this.description,
+            active: this.active,
+        };
+    }
 }

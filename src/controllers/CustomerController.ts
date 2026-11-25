@@ -1,80 +1,104 @@
 import type { Request, Response } from "express";
-import Customer from "../models/Customer.js";
-import { respondToError } from "../http/errors.js";
-import { validateBody, validateId, writeFields } from "../http/validation.js";
+import CustomerRepository from "../repository/CustomerRepository.js";
+import { Customer } from "../models/Customer.js";
+import { sendError } from "./helpers.js";
 
-const writeErrors = {
-    validateInput: true,
-    unique: "Já existe um cadastro com o e-mail informado.",
-} as const;
-
-async function getAll(_req: Request, res: Response) {
+async function getAll(req: Request, res: Response) {
     try {
-        const records = await Customer.findAll();
-        return res.status(200).json(records);
+        const customers = await CustomerRepository.findAll();
+
+        res.status(200).json(customers);
     } catch (error) {
-        return respondToError(res, error, "Erro ao buscar cliente.");
+        sendError(res, error, "Erro ao buscar clientes.");
     }
 }
 
 async function getById(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-    if (!validateId(res, id, "do cliente")) return;
+
+    if (!id) {
+        return res.status(400).json({
+            message: "ID do Cliente não informado."
+        });
+    }
 
     try {
-        const record = await Customer.findById(id);
-        if (record === null) {
-            return res.status(404).json({ message: "Cliente não encontrado." });
-        }
+        const customer = await CustomerRepository.findById(id);
 
-        return res.status(200).json(record);
+        res.status(200).json(customer);
     } catch (error) {
-        return respondToError(res, error, "Erro ao buscar cliente.");
+        sendError(res, error, "Erro ao buscar cliente.");
     }
 }
 
 async function create(req: Request, res: Response) {
-    if (!validateBody(res, req.body, writeFields.customers, { create: true, ignoreRole: true })) return;
-
     try {
-        const record = await Customer.create(req.body);
-        return res.status(201).json(record);
+        const customer = new Customer(req.body ?? {});
+
+        const createdCustomer = await CustomerRepository.create(customer);
+
+        res.status(201).json(createdCustomer);
     } catch (error) {
-        return respondToError(res, error, "Erro ao criar cliente.", writeErrors);
+        sendError(res, error, "Erro ao criar cliente.");
     }
 }
 
 async function update(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-    if (!validateId(res, id, "do cliente")) return;
-    if (!validateBody(res, req.body, writeFields.customers, { create: false, ignoreRole: true })) return;
+    const body = req.body ?? {};
+
+    if (!id) {
+        return res.status(400).json({
+            message: "ID do Cliente não informado."
+        });
+    }
 
     try {
-        const record = await Customer.update(id, req.body);
-        if (record === null) {
-            return res.status(404).json({ message: "Cliente não encontrado." });
+        const customer = await CustomerRepository.findById(id);
+
+        if (body.name !== undefined) {
+            customer.rename(body.name);
+        }
+        if (body.email !== undefined) {
+            customer.changeEmail(body.email);
+        }
+        if (body.phone !== undefined) {
+            customer.changePhone(body.phone);
+        }
+        if (body.address !== undefined) {
+            customer.changeAddress(body.address);
+        }
+        if (body.birth_date !== undefined) {
+            customer.changeBirthDate(body.birth_date);
         }
 
-        return res.status(200).json(record);
+        const updatedCustomer = await CustomerRepository.update(customer);
+
+        res.status(200).json(updatedCustomer);
     } catch (error) {
-        return respondToError(res, error, "Erro ao atualizar cliente.", writeErrors);
+        sendError(res, error, "Erro ao atualizar cliente.");
     }
 }
 
 async function remove(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-    if (!validateId(res, id, "do cliente")) return;
+
+    if (!id) {
+        return res.status(400).json({
+            message: "ID do Cliente não informado."
+        });
+    }
 
     try {
-        const deleted = await Customer.remove(id);
-        if (deleted === null) {
-            return res.status(404).json({ message: "Cliente não encontrado para remoção." });
-        }
+        await CustomerRepository.remove(id);
 
-        return res.status(200).json({ message: "Cliente removido com sucesso." });
+        res.status(200).json({
+            message: "Cliente removido com sucesso.",
+        });
     } catch (error) {
-        return respondToError(res, error, "Erro ao remover cliente.", {
-            foreignKey: "Não é possível remover este cliente pois existem pedidos vinculados a ele.",
+        sendError(res, error, "Erro ao remover cliente.", {
+            status: 409,
+            message: "Não é possível remover este cliente pois existem pedidos vinculados a ele."
         });
     }
 }
@@ -84,5 +108,5 @@ export default {
     getById,
     create,
     update,
-    remove,
-};
+    remove
+}

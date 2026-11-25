@@ -1,113 +1,63 @@
-import supabase from "../config/supabase.js";
-import PersonModel, { type Person } from "./Person.js";
+import { ValidationError } from "../errors/ValidationError.js";
+import { Person, type PersonData, type Role } from "./Person.js";
+import { isDate } from "./validation.js";
 
-
-type Seller = Person & {
-    hire_date: string;
+export type SellerData = PersonData & {
+    hire_date?: string | null;
 };
 
-function toSeller(row: any) {
-    const { person, ...seller } = row;
-    return { ...person, ...seller };
-}
+export class Seller extends Person {
+    private id: string | undefined;
+    private hireDate: string | null;
 
-async function findAll() {
-    const { data, error } = await supabase
-    .from("sellers")
-    .select("id, person_id, hire_date, person:people(*)");
+    constructor(data: SellerData) {
+        super(data);
 
-    if (error) throw error;
+        this.id = undefined;
+        this.hireDate = null;
 
-    return data.map(toSeller);
-}
-
-async function findById(id: string) {
-    const { data, error } = await supabase
-        .from("sellers")
-        .select("id, person_id, hire_date, person:people(*)")
-        .eq("id", id)
-        .maybeSingle();
-
-    if (error){
-        throw error;
-    }
-    if (!data) {
-        return null;
+        if (data.hire_date !== undefined) {
+            this.changeHireDate(data.hire_date);
+        }
     }
 
-    return toSeller(data);
-}
+    static restore(data: SellerData & { id: string; person_id: string }): Seller {
+        const seller = new Seller(data);
 
-async function create(seller: Omit<Seller, "role">) {
-    const { hire_date, ...personData } = seller;
+        seller.id = data.id;
+        seller.personId = data.person_id;
 
-    const person = await PersonModel.create({
-        ...personData,
-        role: "seller"
-    });
-
-    const { data, error } = await supabase
-        .from("sellers")
-        .insert({ person_id: person.id, hire_date })
-        .select("id, person_id, hire_date")
-        .single();
-
-    if (error) {
-        await PersonModel.remove(person.id);
-        throw error;
+        return seller;
     }
 
-    return { ...person, ...data };
-}
-
-async function update(id: string, seller: Partial<Seller>) {
-    const existing = await findById(id);
-    if (!existing) return null;
-
-    const { hire_date, role, ...personData } = seller;
-
-    if (hire_date !== undefined) {
-        const { data, error } = await supabase
-            .from("sellers")
-            .update({ hire_date })
-            .eq("id", id)
-            .select("id")
-            .maybeSingle();
-
-        if (error) throw error;
-        if (!data) return null;
+    getRole(): Role {
+        return "seller";
     }
 
-    if (Object.keys(personData).length) {
-        await PersonModel.update(existing.person_id, personData);
+    public getId(): string | undefined {
+        return this.id;
+    }
+    public getHireDate(): string | null {
+        return this.hireDate;
     }
 
-    return findById(id);
-}
+    changeHireDate(hireDate: string | null): void {
+        if (hireDate !== null && !isDate(hireDate)) {
+            throw new ValidationError("A data de contratação deve estar no formato AAAA-MM-DD.");
+        }
+        this.hireDate = hireDate;
+    }
 
-async function remove(id: string) {
-    const existing = await findById(id);
-    if (!existing) return null;
-
-    const { data, error } = await supabase
-        .from("sellers")
-        .delete()
-        .eq("id", id)
-        .select("id")
-        .maybeSingle();
-
-    if (error) throw error;
-    if (!data) return null;
-
-    await PersonModel.remove(existing.person_id);
-
-    return existing;
-}
-
-export default {
-    findAll,
-    findById,
-    create,
-    update,
-    remove
+    toJSON() {
+        return {
+            id: this.id,
+            person_id: this.getPersonId(),
+            name: this.getName(),
+            email: this.getEmail(),
+            role: this.getRole(),
+            phone: this.getPhone(),
+            address: this.getAddress(),
+            hire_date: this.hireDate,
+        };
+    }
 }

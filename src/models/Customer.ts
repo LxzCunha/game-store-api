@@ -1,113 +1,63 @@
-import supabase from "../config/supabase.js";
-import PersonModel, { type Person } from "./Person.js";
+import { ValidationError } from "../errors/ValidationError.js";
+import { Person, type PersonData, type Role } from "./Person.js";
+import { isDate } from "./validation.js";
 
-
-type Customer = Person & {
-    birth_date: string;
+export type CustomerData = PersonData & {
+    birth_date?: string | null;
 };
 
-function toCustomer(row: any) {
-    const { person, ...customer } = row;
-    return { ...person, ...customer };
-}
+export class Customer extends Person {
+    private id: string | undefined;
+    private birthDate: string | null;
 
-async function findAll() {
-    const { data, error } = await supabase
-    .from("customers")
-    .select("id, person_id, birth_date, person:people(*)");
+    constructor(data: CustomerData) {
+        super(data);
 
-    if (error) throw error;
+        this.id = undefined;
+        this.birthDate = null;
 
-    return data.map(toCustomer);
-}
-
-async function findById(id: string) {
-    const { data, error } = await supabase
-        .from("customers")
-        .select("id, person_id, birth_date, person:people(*)")
-        .eq("id", id)
-        .maybeSingle();
-
-    if (error){
-        throw error;
-    }
-    if (!data) {
-        return null;
+        if (data.birth_date !== undefined) {
+            this.changeBirthDate(data.birth_date);
+        }
     }
 
-    return toCustomer(data);
-}
+    static restore(data: CustomerData & { id: string; person_id: string }): Customer {
+        const customer = new Customer(data);
 
-async function create(customer: Omit<Customer, "role">) {
-    const { birth_date, ...personData } = customer;
+        customer.id = data.id;
+        customer.personId = data.person_id;
 
-    const person = await PersonModel.create({
-        ...personData,
-        role: "customer"
-    });
-
-    const { data, error } = await supabase
-        .from("customers")
-        .insert({ person_id: person.id, birth_date })
-        .select("id, person_id, birth_date")
-        .single();
-
-    if (error) {
-        await PersonModel.remove(person.id);
-        throw error;
+        return customer;
     }
 
-    return { ...person, ...data };
-}
-
-async function update(id: string, customer: Partial<Customer>) {
-    const existing = await findById(id);
-    if (!existing) return null;
-
-    const { birth_date, role, ...personData } = customer;
-
-    if (birth_date !== undefined) {
-        const { data, error } = await supabase
-            .from("customers")
-            .update({ birth_date })
-            .eq("id", id)
-            .select("id")
-            .maybeSingle();
-
-        if (error) throw error;
-        if (!data) return null;
+    getRole(): Role {
+        return "customer";
     }
 
-    if (Object.keys(personData).length) {
-        await PersonModel.update(existing.person_id, personData);
+    public getId(): string | undefined {
+        return this.id;
+    }
+    public getBirthDate(): string | null {
+        return this.birthDate;
     }
 
-    return findById(id);
-}
+    changeBirthDate(birthDate: string | null): void {
+        if (birthDate !== null && !isDate(birthDate)) {
+            throw new ValidationError("A data de nascimento deve estar no formato AAAA-MM-DD.");
+        }
+        this.birthDate = birthDate;
+    }
 
-async function remove(id: string) {
-    const existing = await findById(id);
-    if (!existing) return null;
-
-    const { data, error } = await supabase
-        .from("customers")
-        .delete()
-        .eq("id", id)
-        .select("id")
-        .maybeSingle();
-
-    if (error) throw error;
-    if (!data) return null;
-
-    await PersonModel.remove(existing.person_id);
-
-    return existing;
-}
-
-export default {
-    findAll,
-    findById,
-    create,
-    update,
-    remove
+    toJSON() {
+        return {
+            id: this.id,
+            person_id: this.getPersonId(),
+            name: this.getName(),
+            email: this.getEmail(),
+            role: this.getRole(),
+            phone: this.getPhone(),
+            address: this.getAddress(),
+            birth_date: this.birthDate,
+        };
+    }
 }

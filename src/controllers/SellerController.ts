@@ -1,80 +1,104 @@
 import type { Request, Response } from "express";
-import Seller from "../models/Seller.js";
-import { respondToError } from "../http/errors.js";
-import { validateBody, validateId, writeFields } from "../http/validation.js";
+import SellerRepository from "../repository/SellerRepository.js";
+import { Seller } from "../models/Seller.js";
+import { sendError } from "./helpers.js";
 
-const writeErrors = {
-    validateInput: true,
-    unique: "Já existe um cadastro com o e-mail informado.",
-} as const;
-
-async function getAll(_req: Request, res: Response) {
+async function getAll(req: Request, res: Response) {
     try {
-        const records = await Seller.findAll();
-        return res.status(200).json(records);
+        const sellers = await SellerRepository.findAll();
+
+        res.status(200).json(sellers);
     } catch (error) {
-        return respondToError(res, error, "Erro ao buscar vendedor.");
+        sendError(res, error, "Erro ao buscar vendedores.");
     }
 }
 
 async function getById(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-    if (!validateId(res, id, "do vendedor")) return;
+
+    if (!id) {
+        return res.status(400).json({
+            message: "ID do Vendedor não informado."
+        });
+    }
 
     try {
-        const record = await Seller.findById(id);
-        if (record === null) {
-            return res.status(404).json({ message: "Vendedor não encontrado." });
-        }
+        const seller = await SellerRepository.findById(id);
 
-        return res.status(200).json(record);
+        res.status(200).json(seller);
     } catch (error) {
-        return respondToError(res, error, "Erro ao buscar vendedor.");
+        sendError(res, error, "Erro ao buscar vendedor.");
     }
 }
 
 async function create(req: Request, res: Response) {
-    if (!validateBody(res, req.body, writeFields.sellers, { create: true, ignoreRole: true })) return;
-
     try {
-        const record = await Seller.create(req.body);
-        return res.status(201).json(record);
+        const seller = new Seller(req.body ?? {});
+
+        const createdSeller = await SellerRepository.create(seller);
+
+        res.status(201).json(createdSeller);
     } catch (error) {
-        return respondToError(res, error, "Erro ao criar vendedor.", writeErrors);
+        sendError(res, error, "Erro ao criar vendedor.");
     }
 }
 
 async function update(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-    if (!validateId(res, id, "do vendedor")) return;
-    if (!validateBody(res, req.body, writeFields.sellers, { create: false, ignoreRole: true })) return;
+    const body = req.body ?? {};
+
+    if (!id) {
+        return res.status(400).json({
+            message: "ID do Vendedor não informado."
+        });
+    }
 
     try {
-        const record = await Seller.update(id, req.body);
-        if (record === null) {
-            return res.status(404).json({ message: "Vendedor não encontrado." });
+        const seller = await SellerRepository.findById(id);
+
+        if (body.name !== undefined) {
+            seller.rename(body.name);
+        }
+        if (body.email !== undefined) {
+            seller.changeEmail(body.email);
+        }
+        if (body.phone !== undefined) {
+            seller.changePhone(body.phone);
+        }
+        if (body.address !== undefined) {
+            seller.changeAddress(body.address);
+        }
+        if (body.hire_date !== undefined) {
+            seller.changeHireDate(body.hire_date);
         }
 
-        return res.status(200).json(record);
+        const updatedSeller = await SellerRepository.update(seller);
+
+        res.status(200).json(updatedSeller);
     } catch (error) {
-        return respondToError(res, error, "Erro ao atualizar vendedor.", writeErrors);
+        sendError(res, error, "Erro ao atualizar vendedor.");
     }
 }
 
 async function remove(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-    if (!validateId(res, id, "do vendedor")) return;
+
+    if (!id) {
+        return res.status(400).json({
+            message: "ID do Vendedor não informado."
+        });
+    }
 
     try {
-        const deleted = await Seller.remove(id);
-        if (deleted === null) {
-            return res.status(404).json({ message: "Vendedor não encontrado para remoção." });
-        }
+        await SellerRepository.remove(id);
 
-        return res.status(200).json({ message: "Vendedor removido com sucesso." });
+        res.status(200).json({
+            message: "Vendedor removido com sucesso.",
+        });
     } catch (error) {
-        return respondToError(res, error, "Erro ao remover vendedor.", {
-            foreignKey: "Não é possível remover este vendedor pois existem pedidos vinculados a ele.",
+        sendError(res, error, "Erro ao remover vendedor.", {
+            status: 409,
+            message: "Não é possível remover este vendedor pois existem pedidos vinculados a ele."
         });
     }
 }
@@ -84,5 +108,5 @@ export default {
     getById,
     create,
     update,
-    remove,
-};
+    remove
+}

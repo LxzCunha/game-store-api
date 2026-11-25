@@ -1,104 +1,150 @@
 import type { Request, Response } from "express";
-import Orders from "../models/Orders.js";
-import { respondToError } from "../http/errors.js";
-import { validateBody, validateId, writeFields } from "../http/validation.js";
+import OrdersRepository from "../repository/OrdersRepository.js";
+import { Order } from "../models/Orders.js";
+import { applyActive, sendError } from "./helpers.js";
 
-const writeErrors = {
-    validateInput: true,
-    foreignKey: "O cliente ou vendedor informado não existe.",
+const CUSTOMER_OR_SELLER_NOT_FOUND = {
+    status: 400,
+    message: "O cliente ou o vendedor informado não existe."
 } as const;
 
-async function getAll(_req: Request, res: Response) {
+async function getAll(req: Request, res: Response) {
     try {
-        const records = await Orders.findAll();
-        return res.status(200).json(records);
+        const orders = await OrdersRepository.findAll();
+
+        res.status(200).json(orders);
     } catch (error) {
-        return respondToError(res, error, "Erro ao buscar pedidos.");
+        sendError(res, error, "Erro ao buscar pedidos.");
     }
 }
 
 async function getById(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-    if (!validateId(res, id, "do pedido")) return;
+
+    if (!id) {
+        return res.status(400).json({
+            message: "ID do Pedido não informado."
+        });
+    }
 
     try {
-        const record = await Orders.findById(id);
-        if (record === null) {
-            return res.status(404).json({ message: "Pedido não encontrado." });
-        }
+        const order = await OrdersRepository.findById(id);
 
-        return res.status(200).json(record);
+        res.status(200).json(order);
     } catch (error) {
-        return respondToError(res, error, "Erro ao buscar pedido.");
+        sendError(res, error, "Erro ao buscar pedido.");
     }
 }
 
 async function getByCustomer(req: Request<{ customerId: string }>, res: Response) {
     const { customerId } = req.params;
-    if (!validateId(res, customerId, "do cliente")) return;
+
+    if (!customerId) {
+        return res.status(400).json({
+            message: "ID do Cliente não informado."
+        });
+    }
 
     try {
-        const records = await Orders.findByCustomer(customerId);
-        return res.status(200).json(records);
+        const orders = await OrdersRepository.findByCustomer(customerId);
+
+        res.status(200).json(orders);
     } catch (error) {
-        return respondToError(res, error, "Erro ao buscar pedidos do cliente.");
+        sendError(res, error, "Erro ao buscar pedidos do cliente.");
     }
 }
 
 async function getBySeller(req: Request<{ sellerId: string }>, res: Response) {
     const { sellerId } = req.params;
-    if (!validateId(res, sellerId, "do vendedor")) return;
+
+    if (!sellerId) {
+        return res.status(400).json({
+            message: "ID do Vendedor não informado."
+        });
+    }
 
     try {
-        const records = await Orders.findBySeller(sellerId);
-        return res.status(200).json(records);
+        const orders = await OrdersRepository.findBySeller(sellerId);
+
+        res.status(200).json(orders);
     } catch (error) {
-        return respondToError(res, error, "Erro ao buscar pedidos do vendedor.");
+        sendError(res, error, "Erro ao buscar pedidos do vendedor.");
     }
 }
 
 async function create(req: Request, res: Response) {
-    if (!validateBody(res, req.body, writeFields.orders, { create: true })) return;
+    const body = req.body ?? {};
 
     try {
-        const record = await Orders.create(req.body);
-        return res.status(201).json(record);
+        const order = new Order(body);
+        applyActive(order, body.active);
+
+        const createdOrder = await OrdersRepository.create(order);
+
+        res.status(201).json(createdOrder);
     } catch (error) {
-        return respondToError(res, error, "Erro ao criar pedido.", writeErrors);
+        sendError(res, error, "Erro ao criar pedido.", CUSTOMER_OR_SELLER_NOT_FOUND);
     }
 }
 
 async function update(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-    if (!validateId(res, id, "do pedido")) return;
-    if (!validateBody(res, req.body, writeFields.orders, { create: false })) return;
+    const body = req.body ?? {};
+
+    if (!id) {
+        return res.status(400).json({
+            message: "ID do Pedido não informado."
+        });
+    }
 
     try {
-        const record = await Orders.update(id, req.body);
-        if (record === null) {
-            return res.status(404).json({ message: "Pedido não encontrado." });
+        const order = await OrdersRepository.findById(id);
+
+        if (body.customer_id !== undefined) {
+            order.changeCustomer(body.customer_id);
+        }
+        if (body.seller_id !== undefined) {
+            order.changeSeller(body.seller_id);
+        }
+        if (body.order_date !== undefined) {
+            order.changeOrderDate(body.order_date);
+        }
+        if (body.status !== undefined) {
+            order.changeStatus(body.status);
+        }
+        if (body.total !== undefined) {
+            order.changeTotal(body.total);
         }
 
-        return res.status(200).json(record);
+        applyActive(order, body.active);
+
+        const updatedOrder = await OrdersRepository.update(order);
+
+        res.status(200).json(updatedOrder);
     } catch (error) {
-        return respondToError(res, error, "Erro ao atualizar pedido.", writeErrors);
+        sendError(res, error, "Erro ao atualizar pedido.", CUSTOMER_OR_SELLER_NOT_FOUND);
     }
 }
 
 async function remove(req: Request<{ id: string }>, res: Response) {
     const { id } = req.params;
-    if (!validateId(res, id, "do pedido")) return;
+
+    if (!id) {
+        return res.status(400).json({
+            message: "ID do Pedido não informado."
+        });
+    }
 
     try {
-        const deleted = await Orders.remove(id);
-        if (deleted === null) {
-            return res.status(404).json({ message: "Pedido não encontrado para remoção." });
-        }
+        await OrdersRepository.remove(id);
 
-        return res.status(200).json({ message: "Pedido removido com sucesso." });
+        res.status(200).json({
+            message: "Pedido removido com sucesso.",
+        });
     } catch (error) {
-        return respondToError(res, error, "Erro ao remover pedido.", {
-            foreignKey: "Não é possível remover este pedido, pois ele possui itens vinculados.",
+        sendError(res, error, "Erro ao remover pedido.", {
+            status: 409,
+            message: "Não é possível remover este pedido, pois ele está vinculado a um item pedido."
         });
     }
 }
@@ -110,5 +156,5 @@ export default {
     getBySeller,
     create,
     update,
-    remove,
-};
+    remove
+}
