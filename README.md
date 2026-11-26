@@ -168,6 +168,7 @@ npm run dev
 ```
 
 A API ficará disponível em `http://localhost:3030`.
+A documentação interativa do Swagger ficará disponível em `http://localhost:3030/api-docs`, e o documento OpenAPI em JSON em `http://localhost:3030/api-docs.json`.
 
 **6. Testar com o Postman (opcional)**
 

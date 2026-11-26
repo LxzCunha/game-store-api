@@ -6,6 +6,8 @@ import GenresRoutes from "./routes/GenresRoutes.js";
 import CustomerRoutes from "./routes/CustomerRoutes.js";
 import SellerRoutes from "./routes/SellerRoutes.js";
 import { handleInvalidRequest } from "./http/errors.js";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./config/swagger.js";
 const app = express();
 
 app.use(express.json());
@@ -30,6 +32,11 @@ app.use("/orders", OrdersRoutes);
 
 //CRUD ITENS DO PEDIDO
 app.use("/order-items", OrderItemsRoutes);
+
+app.get("/api-docs.json", (_req, res) => {
+    res.json(swaggerSpec);
+});
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use(handleInvalidRequest);
 
